@@ -1,26 +1,25 @@
-mod config;
 mod client;
+mod cli;
 mod local_data;
 
-use std::io::{self, Write};
-use std::sync::Arc;
-use crate::config::{Config, GLOBAL_CONFIG};
+use client::login::login;
+use cli::setup_lxc::check_lxc;
+use cli::setup_lxc::check_root;
+use cli::install_lxc::install;
+use cli::melisa_cli::melisa;
 
 fn main() {
-    let mut input_username = String::new();
-    let mut input_password = String::new();
-
-    print!("Enter username: ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut input_username).unwrap();
-    print!("Enter password: ");
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut input_password).unwrap();
-
-    let initial_input = Config {
-        username: input_username.trim().to_string(),
-        password: input_password.trim().to_string(),
-    };
-
-    GLOBAL_CONFIG.set(Arc::new(initial_input)).ok().expect("Failed to set global config");
+    if login("user", "pass") {
+        if check_root() {
+            if check_lxc() {
+                melisa();
+            } else {
+                println!("LXC is not installed. Installing now...");
+                install();
+            }
+        } else {
+            println!("This program must be run as root. Please run with sudo.");
+            std::process::exit(1);
+        }
+    }
 }
