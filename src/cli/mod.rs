@@ -1,5 +1,5 @@
-pub mod setup_lxc;
-pub mod install_lxc;
+pub mod root_check;
+pub mod setup;
 pub mod color_text;
 pub mod melisa_cli;
 pub mod helper;

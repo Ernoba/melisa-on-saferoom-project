@@ -8,7 +8,9 @@ use crate::cli::container::attach_to_container;
 use crate::cli::container::stop_container;
 use crate::cli::container::send_command;
 use crate::cli::container::list_containers;
-use crate::cli::color_text::{RED, BOLD, RESET};
+use crate::cli::container::{add_melisa_user,set_user_password, delete_melisa_user, list_melisa_users, upgrade_user, clean_orphaned_sudoers};
+use crate::cli::setup::install;
+use crate::cli::color_text::{RED,YELLOW, BOLD, RESET};
 
 pub enum ExecResult {
     Continue,
@@ -30,6 +32,7 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                     println!("{}Usage: melisa [options]{}", BOLD, RESET);
                     println!("Options:");
                     println!("  --help             Show this help message");
+                    println!("  --setup            Setup LXC environment (install dependencies, etc.)");
                     println!("  --create <name>    Create a new LXC container");
                     println!("  --delete <name>    Delete an existing LXC container");
                     println!("  --run <name>       Run a command inside a container");
@@ -37,6 +40,14 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                     println!("  --stop <name>      Stop a running container");
                     println!("  --list             List all containers");
                     println!("  --active           List only active (running) containers");
+                    println!("  --add <user>       Add a user to Melisa access list");
+                    println!("  --remove <user>    Remove a user from Melisa access list");
+                    println!("  --users            List all users with Melisa access");
+                    println!("  --upgrade <user>   Upgrade a user's permissions (e.g., to sudo)");
+                    println!("  --clean            Clean orphaned sudoers files for non-existent users");
+                },
+                "--setup" => {
+                    install();
                 },
                 "--create" => {
                     if let Some(name) = parts.get(2) {
@@ -101,7 +112,46 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                     } else {
                         println!("{}Error: Container name is required. Usage: melisa --stop <name>{}", RED, RESET);
                     }
-                },                 
+                },
+                "--add" => {
+                    if let Some(name) = parts.get(2) {
+                        add_melisa_user(name);
+                    } else {
+                        println!("{}Usage: melisa --add <username>{}", RED, RESET);
+                    }
+                },
+                "--passwd" => {
+                    if let Some(name) = parts.get(2) {
+                        set_user_password(name);
+                    } else {
+                        println!("{}Usage: melisa --passwd <username>{}", RED, RESET);
+                    }
+                },
+                "--remove" => {
+                    if let Some(name) = parts.get(2) {
+                        println!("{}Are you sure delete user '{}'? (y/N){}", YELLOW, name, RESET);
+                        let mut conf = String::new();
+                        io::stdin().read_line(&mut conf).unwrap();
+                        if conf.trim().to_lowercase() == "y" {
+                            delete_melisa_user(name);
+                        }
+                    } else {
+                        println!("{}Usage: melisa --del <user>{}", RED, RESET);
+                    }
+                },
+                "--user" => {
+                    list_melisa_users();
+                },
+                "--upgrade" => {
+                    if let Some(name) = parts.get(2) {
+                        upgrade_user(name);
+                    } else {
+                        println!("{}Usage: melisa --upgrade <username>{}", RED, RESET);
+                    }
+                },
+                "--clean" => {
+                    clean_orphaned_sudoers();
+                },        
                 "" => {
                     println!("{}Usage: melisa [options]{}", RED, RESET);
                     println!("Try 'melisa --help' for more information.");

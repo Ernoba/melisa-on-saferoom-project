@@ -9,8 +9,13 @@ pub struct Prompt {
 
 impl Prompt {
     pub fn new() -> Self {
+        // Deteksi user hanya untuk keperluan estetika prompt (melisa@user_test2)
         let user = env::var("SUDO_USER").unwrap_or_else(|_| env::var("USER").unwrap_or_default());
-        let home = if user == "root" { "/root".to_string() } else { format!("/home/{}", user) };
+        
+        // KRUSIAL: Jangan gunakan folder user biasa untuk internal Melisa.
+        // Paksa ke /root agar LXC tidak 'nyasar' ke .local/share/lxc milik user biasa.
+        let home = "/root".to_string(); 
+
         let host = fs::read_to_string("/proc/sys/kernel/hostname")
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|_| "fedora".into());
