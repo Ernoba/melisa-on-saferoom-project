@@ -1,4 +1,5 @@
 use std::process::{Command, Stdio};
+use std::env; // Tambahkan ini di bagian paling atas
 use std::io::{self, Write};
 use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW}; // Tambah YELLOW biar lebih pas buat warning
 
@@ -8,12 +9,16 @@ pub enum UserRole {
     Regular,
 }
 
+const LXC_PATH: &str = "/var/lib/lxc";
+
 pub fn create_new_container(name: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Creating Container: {} ---{}", BOLD, name, RESET);
 
-    // 1. Pakai .output() supaya kita bisa baca isi pesan error-nya (stderr)
-    let process = Command::new("lxc-create")
+    let process = Command::new("sudo") // Tambahkan sudo
         .args(&[
+            "lxc-create", 
+            "-P", LXC_PATH, // Paksa ke path sistem
             "-t", "download", 
             "-n", name, 
             "--", 
@@ -21,165 +26,141 @@ pub fn create_new_container(name: &str) {
             "-r", "bookworm", 
             "-a", "amd64"
         ])
-        .output(); // Kita tangkap hasilnya di sini
+        .output();
 
     match process {
         Ok(output) => {
             if output.status.success() {
-                // Kasus: Berhasil
                 println!("{}[SUCCESS]{} Container '{}' created successfully.", GREEN, RESET, name);
             } else {
-                // Kasus: Gagal, kita cek kenapa gagalnya
                 let error_msg = String::from_utf8_lossy(&output.stderr);
-
                 if error_msg.contains("already exists") {
-                    // Kasus spesifik: Container sudah ada
                     println!("{}[WARNING]{} Container '{}' already exists.", YELLOW, RESET, name);
                 } else {
-                    // Kasus: Error lainnya
-                    eprintln!("{}[ERROR]{} Failed to create container '{}'.{}", RED, RESET, name, RESET);
+                    eprintln!("{}[ERROR]{} Failed to create container.{}", RED, RESET, RESET);
                     eprintln!("Details: {}", error_msg);
                 }
             }
         },
-        Err(e) => {
-            eprintln!("{}[FATAL]{} Could not run lxc-create: {}", RED, RESET, e);
-        }
+        Err(e) => eprintln!("{}[FATAL]{} Could not run lxc-create: {}", RED, RESET, e),
     }
 }
 
 pub fn delete_container(name: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Deleting Container: {} ---{}", BOLD, name, RESET);
 
-    let process = Command::new("lxc-destroy")
-        .args(&[
-            "-f",      
-            "-n", name 
-        ])
+    let process = Command::new("sudo")
+        .args(&["lxc-destroy", "-P", LXC_PATH, "-f", "-n", name])
         .output();
 
     match process {
         Ok(output) => {
             if output.status.success() {
-                println!("{}[SUCCESS]{} Container '{}' deleted successfully.", GREEN, RESET, name);
+                println!("{}[SUCCESS]{} Container '{}' deleted.", GREEN, RESET, name);
             } else {
                 let error_msg = String::from_utf8_lossy(&output.stderr);
-                
-                // Cek jika errornya karena kontainer memang tidak ada
-                if error_msg.contains("does not exist") {
-                    println!("{}[INFO]{} Container '{}' does not exist, so no need to delete.", YELLOW, RESET, name);
-                } else {
-                    eprintln!("{}[ERROR]{} Failed to delete container '{}'.{}", RED, RESET, name, RESET);
-                    eprintln!("Details: {}", error_msg);
-                }
+                eprintln!("{}[ERROR]{} Failed to delete container: {}", RED, RESET, error_msg);
             }
         },
-        Err(e) => {
-            eprintln!("{}[FATAL]{} Could not run lxc-destroy: {}", RED, RESET, e);
-        }
+        Err(e) => eprintln!("{}[FATAL]{} Could not run lxc-destroy: {}", RED, RESET, e),
     }
 }
 
-// start container (background)
 pub fn start_container(name: &str) {
-    println!("{}[INFO]{} Starting container '{}' in background...", GREEN, RESET, name);
+    println!("{}[INFO]{} Starting container '{}'...", GREEN, RESET, name);
     
-    let status = Command::new("lxc-start")
-        .args(&["-n", name, "-d"]) 
+    let status = Command::new("sudo")
+        .args(&["lxc-start", "-P", LXC_PATH, "-n", name, "-d"]) 
         .status();
 
     match status {
         Ok(s) if s.success() => println!("{}[SUCCESS]{} Container is now running.", GREEN, RESET),
-        Ok(s) if s.code() == Some(1) => println!("{}[INFO]{} Container is already running.", YELLOW, RESET),
-        _ => eprintln!("{}[ERROR]{} Failed to start container.", RED, RESET),
+        _ => eprintln!("{}[ERROR]{} Failed to start container. Check if it exists.", RED, RESET),
     }
 }
 
-// attach ke container (interaktif)
 pub fn attach_to_container(name: &str) {
-    println!("{}[MODE]{} Entering Saferoom: {}. Type 'exit' to return to MELISA.", BOLD, name, RESET);
+    println!("{}[MODE]{} Entering Saferoom: {}. Type 'exit' to return.", BOLD, name, RESET);
 
-    let status = Command::new("lxc-attach")
-        .args(&["-n", name, "--", "bash"])
+    let _ = Command::new("sudo")
+        .args(&["lxc-attach", "-P", LXC_PATH, "-n", name, "--", "bash"])
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdin(Stdio::inherit())
         .status();
-
-    if let Ok(s) = status {
-        if s.success() {
-            println!("\n{}[BACK]{} Returned to MELISA CLI.", GREEN, RESET);
-        }
-    }
 }
 
-// kill container
 pub fn stop_container(name: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}[SHUTDOWN]{} Stopping container '{}'...", YELLOW, RESET, name);
 
-    // lxc-stop akan mencoba mengirim sinyal shutdown secara halus terlebih dahulu
-    let process = Command::new("lxc-stop")
-        .args(&["-n", name])
+    let process = Command::new("sudo")
+        .args(&["lxc-stop", "-P", LXC_PATH, "-n", name])
         .output();
 
     match process {
         Ok(output) => {
             if output.status.success() {
-                println!("{}[SUCCESS]{} Container '{}' has been stopped.", GREEN, RESET, name);
+                println!("{}[SUCCESS]{} Container '{}' stopped.", GREEN, RESET, name);
             } else {
-                let error_msg = String::from_utf8_lossy(&output.stderr);
-                
-                // Cek jika ternyata kontainer memang sudah mati
-                if error_msg.contains("is not running") {
-                    println!("{}[INFO]{} Container '{}' is not running.", YELLOW, RESET, name);
-                } else {
-                    eprintln!("{}[ERROR]{} Failed to stop container '{}'.", RED, RESET, name);
-                    eprintln!("Details: {}", error_msg);
-                }
+                eprintln!("{}[ERROR]{} Failed to stop container.", RED, RESET);
             }
         },
-        Err(e) => {
-            eprintln!("{}[FATAL]{} Could not run lxc-stop: {}", RED, RESET, e);
-        }
+        Err(e) => eprintln!("{}[FATAL]{} Error: {}", RED, RESET, e),
     }
 }
 
-// run command in container (non-interaktif)
 pub fn send_command(name: &str, command_args: &[&str]) {
     if command_args.is_empty() {
-        eprintln!("{}[ERROR]{} No command provided to send.", RED, RESET);
+        eprintln!("{}[ERROR]{} No command provided.", RED, RESET);
         return;
     }
 
-    println!("{}[SEND]{} Executing on '{}' {}...", BOLD, name, command_args.join(" "), RESET);
+    // 1. CEK STATUS DULU (Pre-flight Check)
+    let check_status = Command::new("sudo")
+        .args(&["/usr/bin/lxc-info", "-P", LXC_PATH, "-n", name, "-s"])
+        .output();
 
-    // Kita gunakan lxc-attach -n <name> -- <command>
-    let status = Command::new("sudo") // PAKSA PAKAI SUDO BIAR JALAN TANPA MASALAH PERIZINAN
+    if let Ok(out) = check_status {
+        let output_str = String::from_utf8_lossy(&out.stdout);
+        if !output_str.contains("RUNNING") {
+            println!("{}[ERROR]{} Container '{}' is NOT running.", RED, RESET, name);
+            println!("{}Tip:{} Run 'melisa --run {}' first.", YELLOW, RESET, name);
+            return; // Berhenti di sini, jangan lanjut eksekusi
+        }
+    } else {
+        eprintln!("{}[ERROR]{} Gagal mengecek status kontainer.", RED, RESET);
+        return;
+    }
+
+    // 2. JIKA RUNNING, BARU EKSEKUSI
+    println!("{}[SEND]{} Executing on '{}'...", BOLD, name, RESET);
+
+    let status = Command::new("sudo")
         .arg("lxc-attach")
-        .arg("-P")             // PAKSA PATH
-        .arg("/var/lib/lxc")
+        .arg("-P")
+        .arg(LXC_PATH)
         .arg("-n")
         .arg(name)
         .arg("--")
-        .args(command_args) // Mengirimkan sisa argumen sebagai perintah
+        .args(command_args)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status();
 
+    // 3. CEK APAKAH PERINTAHNYA BERHASIL
     match status {
         Ok(s) if s.success() => println!("\n{}[DONE]{} Command executed successfully.", GREEN, RESET),
-        _ => eprintln!("\n{}[ERROR]{} Command failed or container is not running.", RED, RESET),
+        _ => eprintln!("\n{}[ERROR]{} Command inside container returned an error.", RED, RESET),
     }
 }
 
-// src/cli/container.rs
-
 pub fn list_containers(only_active: bool) {
-    println!("{}[INFO]{} Listing {}containers...", GREEN, RESET, if only_active { "active " } else { "" });
+    println!("{}[INFO]{} Listing containers...", GREEN, RESET);
     
-    // Gunakan 'sudo' sebagai entry point utama
-    let mut cmd = Command::new("lxc-ls"); 
-    cmd.arg("--fancy");
+    let mut cmd = Command::new("sudo");
+    cmd.args(&["lxc-ls", "-P", LXC_PATH, "--fancy"]);
 
     if only_active {
         cmd.arg("--active");
@@ -190,26 +171,17 @@ pub fn list_containers(only_active: bool) {
     match output {
         Ok(out) => {
             if out.status.success() {
-                let result = String::from_utf8_lossy(&out.stdout);
-                let lines: Vec<&str> = result.trim().lines().collect();
-                
-                // Jika hanya ada header atau kosong
-                if lines.len() <= 1 {
-                    println!("{}[-]{} Tidak ada kontainer yang {}ditemukan di sistem host.", YELLOW, RESET, if only_active { "aktif " } else { "" });
-                } else {
-                    println!("{}", result);
-                }
+                println!("{}", String::from_utf8_lossy(&out.stdout));
             } else {
-                let err = String::from_utf8_lossy(&out.stderr);
-                eprintln!("{}[ERROR]{} Gagal mengambil daftar: {}", RED, RESET, err);
+                eprintln!("{}[ERROR]{} Gagal mengambil daftar.", RED, RESET);
             }
         }
-        Err(e) => eprintln!("{}[FATAL]{} Could not run lxc-ls via sudo: {}", RED, RESET, e),
+        Err(e) => eprintln!("{}[FATAL]{} Error: {}", RED, RESET, e),
     }
 }
-
 //user management
 pub fn add_melisa_user(username: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Adding New Melisa User: {} ---{}", BOLD, username, RESET);
 
     // Langkah 1: Tanya Role
@@ -268,6 +240,7 @@ pub fn set_user_password(username: &str) -> bool {
 }
 
 pub fn delete_melisa_user(username: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Deleting User: {} ---{}", BOLD, username, RESET);
 
     // 1. PAKSA: Usir user dan matikan semua prosesnya (SSH, Bash, dll)
@@ -296,6 +269,7 @@ pub fn delete_melisa_user(username: &str) {
 }
 
 fn configure_sudoers(username: &str, role: UserRole) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     let mut commands = vec![
         "/usr/sbin/lxc-*", // Izinkan semua sub-command lxc
     ];
@@ -308,6 +282,8 @@ fn configure_sudoers(username: &str, role: UserRole) {
             commands.push("/usr/bin/passwd *");
             commands.push("/usr/bin/pkill *");
             commands.push("/usr/bin/grep *");
+            commands.push("/usr/sbin/lxc-*"); // Ini biasanya sudah mencakup lxc-info
+            commands.push("/usr/bin/lxc-info *"); // Tambahkan secara spesifik jika perlu
             commands.push("/usr/bin/ls /etc/sudoers.d/"); // Harus sama persis dengan panggilan di Rust
             commands.push("/usr/bin/rm -f /etc/sudoers.d/melisa_*"); // Match persis dengan kode
             commands.push("/usr/bin/tee /etc/sudoers.d/melisa_*");
@@ -333,6 +309,7 @@ fn configure_sudoers(username: &str, role: UserRole) {
 }
 
 pub fn list_melisa_users() {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Registered Melisa Users ---{}", BOLD, RESET);
 
     // 1. Ambil daftar user asli
@@ -392,6 +369,7 @@ pub fn list_melisa_users() {
 }
 
 pub fn upgrade_user(username: &str) {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Upgrading User Permissions: {} ---{}", BOLD, username, RESET);
 
     // Cek dulu apakah usernya memang ada di sistem
@@ -425,45 +403,61 @@ pub fn upgrade_user(username: &str) {
 // Tambahkan fungsi ini di src/cli/container.rs
 fn check_if_admin(username: &str) -> bool {
     let sudoers_path = format!("/etc/sudoers.d/melisa_{}", username);
+    
     let check_admin = Command::new("sudo")
-        // Tambahkan flag -s agar tidak error jika file tidak ada
+        .arg("-n") // <--- KUNCI SAKTINYA DI SINI (Non-interactive)
         .args(&["/usr/bin/grep", "-qs", "useradd", &sudoers_path])
         .status();
 
     match check_admin {
+        // Jika sukses (0), berarti dia Admin dan punya izin NOPASSWD
         Ok(s) if s.success() => true,
-        _ => false,
+        // Jika gagal (karena nggak ada izin atau perlu password), langsung anggap bukan Admin
+        _ => false, 
     }
 }
 
 pub fn clean_orphaned_sudoers() {
+    if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}--- Cleaning Orphaned Sudoers ---{}", BOLD, RESET);
     
-    // 1. Ambil daftar user yang valid
+    // Gunakan match, jangan unwrap
     let passwd_out = Command::new("grep")
         .args(&["/usr/local/bin/melisa", "/etc/passwd"])
-        .output()
-        .unwrap();
-    let result = String::from_utf8_lossy(&passwd_out.stdout);
-    let existing_users: Vec<&str> = result.lines()
-        .map(|l| l.split(':').next().unwrap_or(""))
-        .collect();
+        .output();
 
-    // 2. Cek folder sudoers.d
-    let files_out = Command::new("sudo").args(&["/usr/bin/ls", "/etc/sudoers.d/"]).output().unwrap();
-    let files = String::from_utf8_lossy(&files_out.stdout);
+    if let Ok(out) = passwd_out {
+        let result = String::from_utf8_lossy(&out.stdout);
+        let existing_users: Vec<&str> = result.lines()
+            .map(|l| l.split(':').next().unwrap_or(""))
+            .collect();
 
-    for file in files.lines() {
-        if file.starts_with("melisa_") {
-            let user_name = file.replace("melisa_", "");
-            // Jika file ada tapi user-nya sudah tidak ada di /etc/passwd
-            if !existing_users.contains(&user_name.as_str()) {
-                println!("{}[CLEANING]{} Removing orphaned file: {}", YELLOW, RESET, file);
-                let path = format!("/etc/sudoers.d/{}", file);
-                // PAKSA pakai path yang sama persis dengan izin sudoers
-                let _ = Command::new("sudo").args(&["/usr/bin/rm", "-f", &path]).status();
+        let files_out = Command::new("sudo").args(&["/usr/bin/ls", "/etc/sudoers.d/"]).output();
+        
+        if let Ok(f_out) = files_out {
+            let files = String::from_utf8_lossy(&f_out.stdout);
+            for file in files.lines() {
+                if file.starts_with("melisa_") {
+                    let user_name = file.replace("melisa_", "");
+                    if !existing_users.contains(&user_name.as_str()) {
+                        println!("{}[CLEANING]{} Removing: {}", YELLOW, RESET, file);
+                        let _ = Command::new("sudo").args(&["/usr/bin/rm", "-f", &format!("/etc/sudoers.d/{}", file)]).status();
+                    }
+                }
             }
         }
     }
-    println!("{}[DONE]{} System is now sparkling clean.", GREEN, RESET);
+    println!("{}[DONE]{} System is clean.", GREEN, RESET);
+}
+
+// Fungsi untuk mengecek apakah user yang sedang menjalankan aplikasi adalah Admin
+fn ensure_admin() -> bool {
+    // Ambil nama user yang sedang login/menjalankan binary
+    let current_user = env::var("USER").unwrap_or_else(|_| "unknown".to_string());
+    
+    if !check_if_admin(&current_user) {
+        println!("{}[ERROR] Permission not allowed. This function is for admin only.{}", RED, RESET);
+        return false;
+    }
+    true
 }
