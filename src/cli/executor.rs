@@ -1,7 +1,7 @@
 use std::{env, process::Command};
 use std::io::{self, Write};
 
-use crate::core::container::{create_new_container, delete_container, start_container, attach_to_container, stop_container, send_command, list_containers, upload_to_container};
+use crate::core::container::{create_new_container, delete_container, start_container, attach_to_container, stop_container, send_command, list_containers, upload_to_container, add_shared_folder};
 use crate::core::setup::install;
 use crate::cli::color_text::{RED,YELLOW, BOLD, RESET};
 use crate::core::user_management::{add_melisa_user,set_user_password, delete_melisa_user, list_melisa_users, upgrade_user, clean_orphaned_sudoers};
@@ -40,6 +40,7 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                     println!("  --upgrade <user>   Upgrade a user's permissions (e.g., to sudo)");
                     println!("  --clean            Clean orphaned sudoers files for non-existent users");
                     println!("  --upload <name> <dest_path>  Upload a file to a container");
+                    println!("  --share <name> <host_path> <container_path>  Share a folder between host and container");
                 },
                 "--setup" => {
                     install();
@@ -80,6 +81,13 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                         println!("{}Error: Container name is required. Usage: melisa --use <name>{}", RED, RESET);
                     }
                 }, 
+                "--share" => {
+                    if let (Some(name), Some(host_p), Some(cont_p)) = (parts.get(2), parts.get(3), parts.get(4)) {
+                        add_shared_folder(name, host_p, cont_p);
+                    } else {
+                        println!("{}Usage: melisa --share <name> <host_path> <container_path>{}", RED, RESET);
+                    }
+                },
                 "--send" => {
                     if let Some(name) = parts.get(2) {
                         // Ambil semua argumen mulai dari indeks ke-3 sampai habis

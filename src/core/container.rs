@@ -233,6 +233,47 @@ pub fn send_command(name: &str, command_args: &[&str]) {
     }
 }
 
+//fungsi untuk membagi folder host dengan me mount ke kontainer 
+// Di src/core/container.rs
+
+pub fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
+    let config_path = format!("{}/{}/config", LXC_PATH, name);
+    
+    // 1. Ubah path menjadi absolut secara otomatis
+    let abs_host_path = std::fs::canonicalize(host_path)
+        .expect("Path folder host tidak valid atau tidak ditemukan");
+
+    if Path::new(&config_path).exists() {
+        // 2. Cek apakah folder tersebut sudah pernah di-share sebelumnya (hindari duplikasi)
+        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        let mount_entry = format!("lxc.mount.entry = {} {}", abs_host_path.display(), container_path);
+        
+        if content.contains(&mount_entry) {
+            println!("{}[SKIP]{} Folder ini sudah terdaftar di konfigurasi.", YELLOW, RESET);
+            return;
+        }
+
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&config_path)
+            .expect("Gagal membuka config container");
+
+        let mount_config = format!(
+            "\n# Shared Folder by MELISA\n\
+            lxc.mount.entry = {} {} none bind,create=dir 0 0\n", 
+            abs_host_path.display(), container_path
+        );
+
+        match file.write_all(mount_config.as_bytes()) {
+            Ok(_) => {
+                println!("{}[SUCCESS]{} Shared folder integrated to {}.", GREEN, RESET, name);
+                println!("{}[IMPORTANT]{} Please run 'melisa --stop {}' and 'melisa --run {}' to apply.", YELLOW, RESET, name, name);
+            },
+            Err(e) => eprintln!("{}[ERROR]{} Gagal menulis konfigurasi: {}", RED, RESET, e),
+        }
+    }
+}
+
 //penanganan upload file ke container dengan tarball via stdin
 pub fn upload_to_container(name: &str, dest_path: &str) {
     let extract_cmd = format!("mkdir -p {} && tar -xzf - -C {}", dest_path, dest_path);

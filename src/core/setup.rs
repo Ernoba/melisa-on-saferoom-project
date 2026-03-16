@@ -2,6 +2,7 @@ use std::process::{Command, Stdio};
 use std::io::{self, Write};
 use std::fs::{self, OpenOptions};
 use std::path::Path;
+
 use crate::cli::color_text::{GREEN, RED, CYAN, BOLD, RESET};
 
 pub fn install() {
@@ -33,6 +34,9 @@ pub fn install() {
     setup_ssh_firewall();
     setup_lxc_network_quota();
 
+    // Langkah 4.5: Konfigurasi Izin Folder Bersama
+    fix_shared_folder_permission("data");
+    
     // Langkah 5: Izin Eksekusi & Pemetaan ID Unprivileged
     fix_uidmap_permissions();
 
@@ -186,6 +190,14 @@ fn fix_uidmap_permissions() {
     let _ = Command::new("chmod").args(&["+x", "/var/lib/lxc"]).status();
     let _ = Command::new("chmod").args(&["+x", "/var/lib"]).status();
     println!("  {:<50} [ {}OK{} ]", "System traversal permissions fixed", GREEN, RESET);
+}
+
+// Di src/core/container.rs (atau core/setup.rs)
+fn fix_shared_folder_permission(host_path: &str) {
+    // UID 100000 adalah default root untuk unprivileged di Melisa kamu
+    let _ = Command::new("sudo")
+        .args(&["chown", "-R", "100000:100000", host_path])
+        .status();
 }
 
 fn setup_user_mapping(username: &str) {
