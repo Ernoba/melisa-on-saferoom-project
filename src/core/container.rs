@@ -1,11 +1,11 @@
-use std::process::{Command, Stdio};
+use tokio::process::Command;
+use std::process::Stdio;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
 // Fungsi ini sekarang menerima DistroMetadata
-use std::thread;
-use std::time::Duration;
+use tokio::time::{sleep, Duration}; // Menggunakan tokio sleep agar tidak blocking
 
 use crate::core::root_check::ensure_admin;
 use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW}; 
@@ -23,9 +23,9 @@ pub struct DistroMetadata {
     pub pkg_manager: String 
 }
 
-pub fn create_new_container(name: &str, meta: DistroMetadata) {
+pub async fn create_new_container(name: &str, meta: DistroMetadata) {
     if !ensure_admin() { return; }
-    ensure_host_network_ready();
+    ensure_host_network_ready().await;
 
     println!("{}--- Creating Container: {} ({}) ---{}", BOLD, name, meta.slug, RESET);
     
@@ -34,7 +34,8 @@ pub fn create_new_container(name: &str, meta: DistroMetadata) {
             "lxc-create", "-P", LXC_PATH, "-t", "download", "-n", name, 
             "--", "-d", &meta.name, "-r", &meta.release, "-a", &meta.arch
         ])
-        .output();
+        .output()
+        .await; // Tambahkan await
 
     match process {
         Ok(output) => {
@@ -47,14 +48,14 @@ pub fn create_new_container(name: &str, meta: DistroMetadata) {
 
                 // Jalankan kontainer untuk setup lanjutan
                 println!("{}[INFO]{} Starting container for initial setup...", YELLOW, RESET);
-                start_container(name);
+                start_container(name).await; // Tambahkan await
 
                 // Menunggu koneksi internet siap di dalam kontainer
                 println!("{}[INFO]{} Menunggu antarmuka jaringan dan DHCP siap (5 detik)...", YELLOW, RESET);
-                thread::sleep(Duration::from_secs(5));
+                sleep(Duration::from_secs(5)).await; // Menggunakan tokio sleep + await
 
                 // Eksekusi update berdasarkan pkg_manager distro tersebut
-                auto_initial_setup(name, &meta.pkg_manager);
+                auto_initial_setup(name, &meta.pkg_manager).await; // Tambahkan await
                 
             } else {
                 let error_msg = String::from_utf8_lossy(&output.stderr);
@@ -75,7 +76,7 @@ pub fn create_new_container(name: &str, meta: DistroMetadata) {
     }
 }
 
-fn auto_initial_setup(name: &str, pkg_manager: &str) {
+async fn auto_initial_setup(name: &str, pkg_manager: &str) {
     let cmd = match pkg_manager {
         "apt"    => "apt-get update -y", 
         "dnf"    => "dnf makecache",
@@ -89,7 +90,8 @@ fn auto_initial_setup(name: &str, pkg_manager: &str) {
 
     let status = Command::new("sudo")
         .args(&["lxc-attach", "-n", name, "--", "sh", "-c", cmd])
-        .status();
+        .status()
+        .await; // Tambahkan await
 
     match status {
         Ok(s) if s.success() => println!("{}[SUCCESS]{} Initial setup completed for {}.", GREEN, RESET, name),
@@ -152,49 +154,71 @@ fn setup_container_dns(name: &str) {
     }
 }
 
-pub fn ensure_host_network_ready() {
+pub async fn ensure_host_network_ready() {
     // Pastikan lxc-net aktif
     let _ = Command::new("systemctl")
         .args(&["start", "lxc-net"])
-        .status();
+        .status()
+        .await; // Tambahkan await
 
     // Pastikan firewalld mengizinkan lxcbr0
     let _ = Command::new("firewall-cmd")
         .args(&["--zone=trusted", "--add-interface=lxcbr0", "--permanent"])
-        .status();
+        .status()
+        .await; // Tambahkan await
     
     let _ = Command::new("firewall-cmd")
         .args(&["--reload"])
-        .status();
+        .status()
+        .await; // Tambahkan await
 }
 
-pub fn delete_container(name: &str) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
-    println!("{}--- Deleting Container: {} ---{}", BOLD, name, RESET);
+// Helper function untuk cek apakah container sedang jalan
+async fn is_container_running(name: &str) -> bool {
+    let output = Command::new("lxc-info")
+        .args(&["-P", LXC_PATH, "-n", name, "-s"])
+        .output()
+        .await;
 
-    let process = Command::new("sudo")
-        .args(&["lxc-destroy", "-P", LXC_PATH, "-f", "-n", name])
-        .output();
-
-    match process {
-        Ok(output) => {
-            if output.status.success() {
-                println!("{}[SUCCESS]{} Container '{}' deleted.", GREEN, RESET, name);
-            } else {
-                let error_msg = String::from_utf8_lossy(&output.stderr);
-                eprintln!("{}[ERROR]{} Failed to delete container: {}", RED, RESET, error_msg);
-            }
+    match output {
+        Ok(out) => {
+            let status_str = String::from_utf8_lossy(&out.stdout);
+            status_str.contains("RUNNING")
         },
-        Err(e) => eprintln!("{}[FATAL]{} Could not run lxc-destroy: {}", RED, RESET, e),
+        _ => false,
     }
 }
 
-pub fn start_container(name: &str) {
+pub async fn delete_container(name: &str) {
+    if !ensure_admin() { return; } 
+    println!("{}--- Processing Deletion: {} ---{}", BOLD, name, RESET);
+
+    // 1. Cek status (Gunakan .status() agar tidak gantung kalau sudo minta pass)
+    if is_container_running(name).await {
+        println!("{}[INFO]{} Container '{}' is running. Stopping...", YELLOW, RESET, name);
+        stop_container(name).await;
+    }
+
+    // 2. Hapus (Gunakan .status() untuk interaksi terminal yang lebih baik)
+    let status = Command::new("sudo")
+        .args(&["lxc-destroy", "-P", LXC_PATH, "-n", name])
+        .status() // <--- GANTI .output() JADI .status()
+        .await;
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("{}[SUCCESS]{} Container '{}' dihapus.", GREEN, RESET, name);
+        },
+        _ => eprintln!("{}[ERROR]{} Gagal menghapus. Pastikan nama benar.", RED, RESET),
+    }
+}
+pub async fn start_container(name: &str) {
     println!("{}[INFO]{} Starting container '{}'...", GREEN, RESET, name);
     
     let status = Command::new("sudo")
         .args(&["lxc-start", "-P", LXC_PATH, "-n", name, "-d"]) 
-        .status();
+        .status()
+        .await; // Tambahkan await
 
     match status {
         Ok(s) if s.success() => println!("{}[SUCCESS]{} Container is now running.", GREEN, RESET),
@@ -202,7 +226,7 @@ pub fn start_container(name: &str) {
     }
 }
 
-pub fn attach_to_container(name: &str) {
+pub async fn attach_to_container(name: &str) {
     println!("{}[MODE]{} Entering Saferoom: {}. Type 'exit' to return.", BOLD, name, RESET);
 
     let _ = Command::new("sudo")
@@ -210,16 +234,18 @@ pub fn attach_to_container(name: &str) {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdin(Stdio::inherit())
-        .status();
+        .status()
+        .await; // Tambahkan await
 }
 
-pub fn stop_container(name: &str) {
+pub async fn stop_container(name: &str) {
     if !ensure_admin() { return; } // Gerbang Keamanan
     println!("{}[SHUTDOWN]{} Stopping container '{}'...", YELLOW, RESET, name);
 
     let process = Command::new("sudo")
         .args(&["lxc-stop", "-P", LXC_PATH, "-n", name])
-        .output();
+        .output()
+        .await; // Tambahkan await
 
     match process {
         Ok(output) => {
@@ -233,7 +259,7 @@ pub fn stop_container(name: &str) {
     }
 }
 
-pub fn send_command(name: &str, command_args: &[&str]) {
+pub async fn send_command(name: &str, command_args: &[&str]) {
     if command_args.is_empty() {
         eprintln!("{}[ERROR]{} No command provided.", RED, RESET);
         return;
@@ -242,7 +268,8 @@ pub fn send_command(name: &str, command_args: &[&str]) {
     // 1. CEK STATUS DULU (Pre-flight Check)
     let check_status = Command::new("sudo")
         .args(&["/usr/bin/lxc-info", "-P", LXC_PATH, "-n", name, "-s"])
-        .output();
+        .output()
+        .await; // Tambahkan await
 
     if let Ok(out) = check_status {
         let output_str = String::from_utf8_lossy(&out.stdout);
@@ -270,7 +297,8 @@ pub fn send_command(name: &str, command_args: &[&str]) {
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .status();
+        .status()
+        .await; // Tambahkan await
 
     // 3. CEK APAKAH PERINTAHNYA BERHASIL
     match status {
@@ -282,7 +310,7 @@ pub fn send_command(name: &str, command_args: &[&str]) {
 //fungsi untuk membagi folder host dengan me mount ke kontainer 
 // Di src/core/container.rs
 
-pub fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
+pub async fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
     let config_path = format!("{}/{}/config", LXC_PATH, name);
     
     // 1. Ubah path menjadi absolut secara otomatis
@@ -320,7 +348,7 @@ pub fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
     }
 }
 
-pub fn remove_shared_folder(name: &str, host_path: &str, container_path: &str) {
+pub async fn remove_shared_folder(name: &str, host_path: &str, container_path: &str) {
     let config_path = format!("{}/{}/config", LXC_PATH, name);
     
     // 1. Standarisasi path host agar match dengan yang ada di config
@@ -375,7 +403,7 @@ pub fn remove_shared_folder(name: &str, host_path: &str, container_path: &str) {
 }
 
 //penanganan upload file ke container dengan tarball via stdin
-pub fn upload_to_container(name: &str, dest_path: &str) {
+pub async fn upload_to_container(name: &str, dest_path: &str) {
     let extract_cmd = format!("mkdir -p {} && tar -xzf - -C {}", dest_path, dest_path);
     
     let status = Command::new("sudo")
@@ -383,7 +411,8 @@ pub fn upload_to_container(name: &str, dest_path: &str) {
         .stdin(Stdio::inherit())  // Menerima file tarbal dari koneksi klien
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .status();
+        .status()
+        .await; // Tambahkan await
 
     match status {
         Ok(s) if s.success() => println!("Upload ke '{}' selesai.", dest_path),
@@ -391,7 +420,7 @@ pub fn upload_to_container(name: &str, dest_path: &str) {
     }
 }
 
-pub fn list_containers(only_active: bool) {
+pub async fn list_containers(only_active: bool) {
     println!("{}[INFO]{} Listing containers...", GREEN, RESET);
     
     let mut cmd = Command::new("sudo");
@@ -401,7 +430,7 @@ pub fn list_containers(only_active: bool) {
         cmd.arg("--active");
     }
 
-    let output = cmd.output();
+    let output = cmd.output().await; // Tambahkan await
 
     match output {
         Ok(out) => {

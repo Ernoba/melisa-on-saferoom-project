@@ -67,17 +67,30 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 },
                 "--search" => {
                     let keyword = parts.get(2).unwrap_or(&"").to_lowercase();
-                    let list = execute_with_spinner("Sedang mencari distro...", || {
+                    
+                    // Ambil tuple (data, is_cache)
+                    let (list, is_cache) = execute_with_spinner(
+                        "Sedang menyinkronkan daftar distro...", 
                         get_lxc_distro_list()
-                    });
+                    ).await;
 
-                    println!("{:<20} | {:<10} | {:<10}", "KODE UNIK", "DISTRO", "ARCH");
+                    // Beri tahu user sumber datanya
+                    if is_cache {
+                        println!("{}[CACHE]{} Menampilkan data lokal (Offline Mode).", YELLOW, RESET);
+                    } else {
+                        println!("{}[FRESH]{} Berhasil menyinkronkan daftar terbaru dari server.", GREEN, RESET);
+                    }
+
+                    println!("\n{:<20} | {:<10} | {:<10}", "KODE UNIK", "DISTRO", "ARCH");
+                    println!("{}", "-".repeat(45)); // Garis pemisah agar rapi
+
                     for d in list {
                         if d.slug.contains(&keyword) || d.name.contains(&keyword) {
                             println!("{:<20} | {:<10} | {:<10}", d.slug, d.name, d.arch);
                         }
                     }
                 },
+
                 "--create" => {
                     let name = parts.get(2).unwrap_or(&"");
                     let code = parts.get(3).unwrap_or(&"");
@@ -87,57 +100,95 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         return ExecResult::Continue;
                     }
 
-                    let list = execute_with_spinner("Memvalidasi distro...", || {
+                    // Ambil tuple (list, is_cache) agar konsisten dengan --search
+                    let (list, is_cache) = execute_with_spinner(
+                        "Memvalidasi distro...", 
                         get_lxc_distro_list()
-                    });
+                    ).await;
 
+                    // Opsional: Kasih tahu user kalau validasinya pakai data cache
+                    if is_cache {
+                        println!("{}[INFO]{} Memvalidasi kode '{}' menggunakan data lokal.", YELLOW, RESET, code);
+                    }
+
+                    // Cari metadata distro berdasarkan slug (kode unik)
                     if let Some(meta) = list.into_iter().find(|d| d.slug == *code) {
-                        // Container creation biasanya lama, pastikan create_new_container async
-                        execute_with_spinner(&format!("Sedang membuat container {}...", name), || {
-                            create_new_container(name, meta);
-                        });
+                        // Jalankan fungsi create_new_container yang sudah async
+                        execute_with_spinner(
+                            &format!("Sedang membuat container {}...", name), 
+                            create_new_container(name, meta)
+                        ).await;
+                        
                         println!("{}[SUCCESS]{} Container berhasil dibuat!", GREEN, RESET);
                     } else {
-                        println!("{}[ERROR]{} Kode '{}' tidak ditemukan.", RED, code, RESET);
+                        println!("{}[ERROR]{} Kode '{}' tidak ditemukan di daftar distro.", RED, code, RESET);
+                        println!("{}Tip:{} Gunakan 'melisa --search' untuk melihat daftar kode yang tersedia.", YELLOW, RESET);
                     }
                 },
                 "--delete" => {
                     if let Some(name) = parts.get(2) {
-                        print!("{}Are you sure delete '{}'? {} (y/N) {}", BOLD, name, RED, RESET);
-                        let _ = io::stdout().flush().await; // Async flush
+                        // Import flush standar di sini agar lebih galak
+                        use std::io::{self as std_io, Write};
+
+                        println!("{}[INFO]{} Memvalidasi penghapusan untuk '{}'...", YELLOW, RESET, name);
+
+                        // 1. Cetak prompt
+                        print!("{}Are you sure delete '{}'? {} (y/N): {}", BOLD, name, RED, RESET);
+                        
+                        // 2. PAKSA FLUSH (Pake std::io agar instan muncul di terminal)
+                        std_io::stdout().flush().expect("Gagal flush stdout");
 
                         let mut confirmation = String::new();
-                        let mut reader = io::BufReader::new(io::stdin());
-                        if reader.read_line(&mut confirmation).await.is_ok() {
-                            if confirmation.trim().eq_ignore_ascii_case("y") {
-                                delete_container(name);
+                        let stdin = io::stdin();
+                        let mut reader = io::BufReader::new(stdin);
+                        
+                        // 3. Baca input
+                        if let Ok(_) = reader.read_line(&mut confirmation).await {
+                            let input = confirmation.trim().to_lowercase();
+                            
+                            // Jika user cuma pencet Enter, jangan biarkan lanjut
+                            if input.is_empty() {
+                                println!("{}[CANCEL]{} Tidak ada input, penghapusan dibatalkan.", YELLOW, RESET);
+                                return ExecResult::Continue;
+                            }
+
+                            if input == "y" || input == "yes" {
+                                // 4. Panggil dengan spinner
+                                execute_with_spinner(
+                                    &format!("sedang menghapus container {}", name),
+                                    delete_container(name)
+                                ).await;
+                            } else {
+                                println!("{}[CANCEL]{} Penghapusan dibatalkan.", YELLOW, RESET);
                             }
                         }
+                    } else {
+                        println!("{}[ERROR]{} Nama container harus diisi. Contoh: melisa --delete mybox", RED, RESET);
                     }
                 },
                 // 2. Tambahkan .await pada pemanggilan Command luar (jika ada)
                 "--run" => {
                     if let Some(name) = parts.get(2) {
-                        start_container(name); // Jika ini memanggil LXC, jadikan async
+                        start_container(name).await; // Jika ini memanggil LXC, jadikan async
                     }
                 },
                 "--use" => {
                     if let Some(name) = parts.get(2) {
-                        attach_to_container(name);
+                        attach_to_container(name).await;
                     } else {
                         println!("{}Error: Container name is required. Usage: melisa --use <name>{}", RED, RESET);
                     }
                 }, 
                 "--share" => {
                     if let (Some(name), Some(host_p), Some(cont_p)) = (parts.get(2), parts.get(3), parts.get(4)) {
-                        add_shared_folder(name, host_p, cont_p);
+                        add_shared_folder(name, host_p, cont_p).await;
                     } else {
                         println!("{}Usage: melisa --share <name> <host_path> <container_path>{}", RED, RESET);
                     }
                 },
                 "--reshare" => {
                     if let (Some(name), Some(host_p), Some(cont_p)) = (parts.get(2), parts.get(3), parts.get(4)) {
-                        remove_shared_folder(name, host_p, cont_p);
+                        remove_shared_folder(name, host_p, cont_p).await;
                     } else {
                         println!("{}Usage: melisa --reshare <name> <host_path> <container_path>{}", RED, RESET);
                     }
@@ -148,7 +199,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         let cmd_to_send = &parts[3..]; 
                         
                         if !cmd_to_send.is_empty() {
-                            send_command(name, cmd_to_send);
+                            send_command(name, cmd_to_send).await;
                         } else {
                             println!("{}Usage: melisa --send <name> <command>{}", RED, RESET);
                             println!("Example: melisa --send mybox apt update");
@@ -159,34 +210,34 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 },
                 "--upload" => {
                     if let (Some(name), Some(dest)) = (parts.get(2), parts.get(3)) {
-                        upload_to_container(name, dest);
+                        upload_to_container(name, dest).await;
                     } else {
                         println!("{}Usage: melisa --upload <name> <dest_path>{}", RED, RESET);
                     }
                 },
                 "--list" => {
-                    list_containers(false);
+                    list_containers(false).await;
                 },
                 "--active" => {
-                    list_containers(true);
+                    list_containers(true).await;
                 },
                 "--stop" => {
                     if let Some(name) = parts.get(2) {
-                        stop_container(name);
+                        stop_container(name).await;
                     } else {
                         println!("{}Error: Container name is required. Usage: melisa --stop <name>{}", RED, RESET);
                     }
                 },
                 "--add" => {
                     if let Some(name) = parts.get(2) {
-                        add_melisa_user(name);
+                        add_melisa_user(name).await;
                     } else {
                         println!("{}Usage: melisa --add <username>{}", RED, RESET);
                     }
                 },
                 "--passwd" => {
                     if let Some(name) = parts.get(2) {
-                        set_user_password(name);
+                        set_user_password(name).await;
                     } else {
                         println!("{}Usage: melisa --passwd <username>{}", RED, RESET);
                     }
@@ -201,7 +252,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         if reader.read_line(&mut conf).await.is_ok() {
                             if conf.trim().to_lowercase() == "y" {
                                 // Pastikan fungsi ini juga async!
-                                delete_melisa_user(name); 
+                                delete_melisa_user(name).await; 
                             }
                         }
                     } else {
@@ -209,17 +260,17 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     }
                 },
                 "--user" => {
-                    list_melisa_users();
+                    list_melisa_users().await;
                 },
                 "--upgrade" => {
                     if let Some(name) = parts.get(2) {
-                        upgrade_user(name);
+                        upgrade_user(name).await;
                     } else {
                         println!("{}Usage: melisa --upgrade <username>{}", RED, RESET);
                     }
                 },
                 "--clean" => {
-                    clean_orphaned_sudoers();
+                    clean_orphaned_sudoers().await;
                 },        
                 "" => {
                     println!("{}Usage: melisa [options]{}", RED, RESET);

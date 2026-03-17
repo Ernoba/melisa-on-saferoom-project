@@ -1,9 +1,9 @@
-use std::process::{Command, Stdio};
-use std::io::{self, Write};
+use tokio::process::Command;
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::process::Stdio; // Penting: Stdio tetap dari std
 
-use crate::core::root_check::ensure_admin;
-use crate::core::root_check::check_if_admin;
-use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW}; // Tambah YELLOW biar lebih pas buat warning
+use crate::core::root_check::{ensure_admin, check_if_admin};
+use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW};
 
 // 1. Definisikan Enum untuk Role
 pub enum UserRole {
@@ -11,9 +11,10 @@ pub enum UserRole {
     Regular,
 }
 
-//user management
-pub fn add_melisa_user(username: &str) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+// --- USER MANAGEMENT ---
+
+pub async fn add_melisa_user(username: &str) {
+    if !ensure_admin() { return; } 
     println!("{}--- Adding New Melisa User: {} ---{}", BOLD, username, RESET);
 
     // Langkah 1: Tanya Role
@@ -21,43 +22,46 @@ pub fn add_melisa_user(username: &str) {
     println!("  1) Admin (Can manage users & LXC)");
     println!("  2) Regular (Can only manage LXC)");
     print!("Choose (1/2): ");
-    let _ = io::stdout().flush();
+    let _ = io::stdout().flush().await;
 
     let mut choice = String::new();
-    io::stdin().read_line(&mut choice).expect("Failed to read input");
+    let mut reader = BufReader::new(io::stdin());
+    reader.read_line(&mut choice).await.expect("Failed to read input");
 
     let role = match choice.trim() {
         "1" => UserRole::Admin,
-        _ => UserRole::Regular, // Default ke Regular jika input salah
+        _ => UserRole::Regular,
     };
 
     // Langkah 2: Buat User Sistem
     let status = Command::new("sudo")
         .args(&["/usr/sbin/useradd", "-m", "-s", "/usr/local/bin/melisa", username])
-        .status();
+        .status()
+        .await;
 
-    if let Ok(s) = status {
-        if s.success() {
+    match status {
+        Ok(s) if s.success() => {
             println!("{}[SUCCESS]{} User '{}' created.", GREEN, RESET, username);
             
-            // Langkah 3: Set Password
-            if set_user_password(username) {
-                // Langkah 4: Konfigurasi Sudoers berdasarkan Role
-                configure_sudoers(username, role);
+            // Langkah 3 & 4
+            if set_user_password(username).await {
+                configure_sudoers(username, role).await;
             }
-        } else {
+        }
+        _ => {
             eprintln!("{}[ERROR]{} Failed to create user.", RED, RESET);
         }
     }
 }
 
-// Fungsi pembantu untuk set password
-pub fn set_user_password(username: &str) -> bool {
+pub async fn set_user_password(username: &str) -> bool {
     println!("{}[ACTION]{} Please set password for {}:", YELLOW, RESET, username);
+    // Jalankan passwd secara interaktif
     let status = Command::new("sudo")
         .arg("passwd")
         .arg(username)
-        .status();
+        .status()
+        .await; // Tambahkan .await
 
     match status {
         Ok(s) if s.success() => {
@@ -71,24 +75,23 @@ pub fn set_user_password(username: &str) -> bool {
     }
 }
 
-pub fn delete_melisa_user(username: &str) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+pub async fn delete_melisa_user(username: &str) {
+    if !ensure_admin() { return; }
     println!("{}--- Deleting User: {} ---{}", BOLD, username, RESET);
 
-    // 1. PAKSA: Usir user dan matikan semua prosesnya (SSH, Bash, dll)
     println!("{}[INFO]{} Terminating all processes for user '{}'...", YELLOW, RESET, username);
-    let _ = Command::new("sudo").args(&["/usr/bin/pkill", "-u", username]).status();
+    let _ = Command::new("sudo").args(&["/usr/bin/pkill", "-u", username]).status().await;
 
-    // 2. Hapus user sistem
     let status_del = Command::new("sudo")
-        .args(&["/usr/sbin/userdel", "-r", "-f", username]) // Tambah -f (force)
-        .status();
+        .args(&["/usr/sbin/userdel", "-r", "-f", username])
+        .status()
+        .await;
 
-    // 3. Hapus file sudoers
     let sudoers_path = format!("/etc/sudoers.d/melisa_{}", username);
     let status_rm = Command::new("sudo")
         .args(&["/usr/bin/rm", "-f", &sudoers_path])
-        .status();
+        .status()
+        .await;
 
     match (status_del, status_rm) {
         (Ok(s1), Ok(s2)) if s1.success() && s2.success() => {
@@ -100,24 +103,17 @@ pub fn delete_melisa_user(username: &str) {
     }
 }
 
-fn configure_sudoers(username: &str, role: UserRole) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
-    let mut commands = vec![
-        "/usr/sbin/lxc-*", // Izinkan semua sub-command lxc
-    ];
+async fn configure_sudoers(username: &str, role: UserRole) {
+    let mut commands = vec!["/usr/sbin/lxc-*"];
 
     match role {
         UserRole::Admin => {
-            commands.push("/usr/sbin/useradd *");
-            commands.push("/usr/sbin/userdel *");
-            commands.push("/usr/bin/passwd *");
-            commands.push("/usr/bin/pkill *");
-            commands.push("/usr/bin/grep *");
-            commands.push("/usr/sbin/lxc-*"); // Ini biasanya sudah mencakup lxc-info
-            commands.push("/usr/bin/lxc-info *"); // Tambahkan secara spesifik jika perlu
-            commands.push("/usr/bin/ls /etc/sudoers.d/"); // Harus sama persis dengan panggilan di Rust
-            commands.push("/usr/bin/rm -f /etc/sudoers.d/melisa_*"); // Match persis dengan kode
-            commands.push("/usr/bin/tee /etc/sudoers.d/melisa_*");
+            commands.extend(vec![
+                "/usr/sbin/useradd *", "/usr/sbin/userdel *", "/usr/bin/passwd *",
+                "/usr/bin/pkill *", "/usr/bin/grep *", "/usr/bin/lxc-info *",
+                "/usr/bin/ls /etc/sudoers.d/", "/usr/bin/rm -f /etc/sudoers.d/melisa_*",
+                "/usr/bin/tee /etc/sudoers.d/melisa_*"
+            ]);
         },
         UserRole::Regular => {}
     }
@@ -125,7 +121,6 @@ fn configure_sudoers(username: &str, role: UserRole) {
     let sudoers_rule = format!("{} ALL=(root) NOPASSWD: {}\n", username, commands.join(", "));
     let sudoers_path = format!("/etc/sudoers.d/melisa_{}", username);
 
-    // Proses tulis file dengan sudo tee...
     let mut child = Command::new("sudo")
         .args(&["/usr/bin/tee", &sudoers_path])
         .stdin(Stdio::piped())
@@ -134,19 +129,19 @@ fn configure_sudoers(username: &str, role: UserRole) {
         .expect("Failed to spawn sudo tee");
 
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(sudoers_rule.as_bytes());
+        let _ = stdin.write_all(sudoers_rule.as_bytes()).await; // Tambahkan .await
     }
-    child.wait().unwrap();
+    let _ = child.wait().await;
 }
 
-pub fn list_melisa_users() {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+pub async fn list_melisa_users() {
+    if !ensure_admin() { return; }
     println!("{}--- Registered Melisa Users ---{}", BOLD, RESET);
 
-    // 1. Ambil daftar user asli
     let passwd_out = Command::new("grep")
         .args(&["/usr/local/bin/melisa", "/etc/passwd"])
-        .output();
+        .output()
+        .await;
 
     let mut existing_users = Vec::new();
 
@@ -165,13 +160,12 @@ pub fn list_melisa_users() {
         }
     }
 
-    // 2. LOGIKA JANITOR dengan Error Handling yang Jujur
     println!("\n{}--- Checking for Orphaned Sudoers (Trash) ---{}", BOLD, RESET);
     
-    // Pastikan path /usr/bin/ls ini SAMA PERSIS dengan yang ada di file sudoers
     let sudoers_files = Command::new("sudo")
         .args(&["/usr/bin/ls", "/etc/sudoers.d/"])
-        .output();
+        .output()
+        .await;
     
     match sudoers_files {
         Ok(out) if out.status.success() => {
@@ -181,7 +175,6 @@ pub fn list_melisa_users() {
             for file in files.lines() {
                 if file.starts_with("melisa_") {
                     let user_from_file = file.replace("melisa_", "");
-                    // Cukup gunakan &user_from_file karena user_from_file adalah String
                     if !existing_users.contains(&user_from_file) {
                         println!("  {}! Found trash:{} {} (User already deleted)", RED, RESET, file);
                         found_trash = true;
@@ -192,22 +185,18 @@ pub fn list_melisa_users() {
                 println!("  {}No trash found. System is clean.{}", GREEN, RESET); 
             }
         },
-        _ => {
-            // Jika masuk ke sini, berarti sudo minta password atau ditolak
-            println!("{}[ERROR]{} Akses ditolak saat memeriksa sudoers. Pastikan izin NOPASSWD benar.", RED, RESET);
-        }
+        _ => println!("{}[ERROR]{} Akses ditolak saat memeriksa sudoers.", RED, RESET),
     }
 }
 
-pub fn upgrade_user(username: &str) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+pub async fn upgrade_user(username: &str) {
+    if !ensure_admin() { return; }
     println!("{}--- Upgrading User Permissions: {} ---{}", BOLD, username, RESET);
 
-    // Cek dulu apakah usernya memang ada di sistem
-    let check_user = Command::new("id").arg(username).output();
+    let check_user = Command::new("id").arg(username).output().await;
     if let Ok(out) = check_user {
         if !out.status.success() {
-            eprintln!("{}[ERROR]{} User '{}' tidak ditemukan di sistem.", RED, RESET, username);
+            eprintln!("{}[ERROR]{} User '{}' tidak ditemukan.", RED, RESET, username);
             return;
         }
     }
@@ -216,29 +205,29 @@ pub fn upgrade_user(username: &str) {
     println!("  1) Admin (Full Access)");
     println!("  2) Regular (LXC Only)");
     print!("Choose (1/2): ");
-    let _ = io::stdout().flush();
+    let _ = io::stdout().flush().await;
 
     let mut choice = String::new();
-    io::stdin().read_line(&mut choice).unwrap();
+    let mut reader = BufReader::new(io::stdin());
+    reader.read_line(&mut choice).await.unwrap();
 
     let role = match choice.trim() {
         "1" => UserRole::Admin,
         _ => UserRole::Regular,
     };
 
-    // Panggil fungsi konfigurasi sudoers yang sudah kita buat tadi
-    configure_sudoers(username, role);
+    configure_sudoers(username, role).await;
     println!("{}[DONE]{} Izin user '{}' telah diperbarui.", GREEN, RESET, username);
 }
 
-pub fn clean_orphaned_sudoers() {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+pub async fn clean_orphaned_sudoers() {
+    if !ensure_admin() { return; }
     println!("{}--- Cleaning Orphaned Sudoers ---{}", BOLD, RESET);
     
-    // Gunakan match, jangan unwrap
     let passwd_out = Command::new("grep")
         .args(&["/usr/local/bin/melisa", "/etc/passwd"])
-        .output();
+        .output()
+        .await;
 
     if let Ok(out) = passwd_out {
         let result = String::from_utf8_lossy(&out.stdout);
@@ -246,7 +235,7 @@ pub fn clean_orphaned_sudoers() {
             .map(|l| l.split(':').next().unwrap_or(""))
             .collect();
 
-        let files_out = Command::new("sudo").args(&["/usr/bin/ls", "/etc/sudoers.d/"]).output();
+        let files_out = Command::new("sudo").args(&["/usr/bin/ls", "/etc/sudoers.d/"]).output().await;
         
         if let Ok(f_out) = files_out {
             let files = String::from_utf8_lossy(&f_out.stdout);
@@ -255,7 +244,7 @@ pub fn clean_orphaned_sudoers() {
                     let user_name = file.replace("melisa_", "");
                     if !existing_users.contains(&user_name.as_str()) {
                         println!("{}[CLEANING]{} Removing: {}", YELLOW, RESET, file);
-                        let _ = Command::new("sudo").args(&["/usr/bin/rm", "-f", &format!("/etc/sudoers.d/{}", file)]).status();
+                        let _ = Command::new("sudo").args(&["/usr/bin/rm", "-f", &format!("/etc/sudoers.d/{}", file)]).status().await;
                     }
                 }
             }
