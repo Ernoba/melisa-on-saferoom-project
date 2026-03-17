@@ -1,8 +1,9 @@
 use std::{env, process::Command};
 use std::io::{self, Write};
 
-use crate::core::container::{create_new_container, delete_container, start_container, attach_to_container, stop_container, send_command, list_containers, upload_to_container, add_shared_folder};
+use crate::core::container::{create_new_container, delete_container, start_container, attach_to_container, stop_container, send_command, list_containers, upload_to_container, add_shared_folder, remove_shared_folder};
 use crate::core::setup::install;
+use crate::core::root_check::admin_check;
 use crate::cli::color_text::{RED,YELLOW, BOLD, RESET};
 use crate::core::user_management::{add_melisa_user,set_user_password, delete_melisa_user, list_melisa_users, upgrade_user, clean_orphaned_sudoers};
 
@@ -23,24 +24,35 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
 
             match sub_cmd {
                 "--help" | "-h" => {
-                    println!("{}Usage: melisa [options]{}", BOLD, RESET);
-                    println!("Options:");
-                    println!("  --help             Show this help message");
-                    println!("  --setup            Setup LXC environment (install dependencies, etc.)");
-                    println!("  --create <name>    Create a new LXC container");
-                    println!("  --delete <name>    Delete an existing LXC container");
-                    println!("  --run <name>       Run a command inside a container");
-                    println!("  --use <name>       Attach to a container interactively");
-                    println!("  --stop <name>      Stop a running container");
-                    println!("  --list             List all containers");
-                    println!("  --active           List only active (running) containers");
-                    println!("  --add <user>       Add a user to Melisa access list");
-                    println!("  --remove <user>    Remove a user from Melisa access list");
-                    println!("  --users            List all users with Melisa access");
-                    println!("  --upgrade <user>   Upgrade a user's permissions (e.g., to sudo)");
-                    println!("  --clean            Clean orphaned sudoers files for non-existent users");
-                    println!("  --upload <name> <dest_path>  Upload a file to a container");
-                    println!("  --share <name> <host_path> <container_path>  Share a folder between host and container");
+                    if !admin_check() {
+                        println!("{}Usage: melisa [options]{}", BOLD, RESET);
+                        println!("Options:");
+                        println!("  --help             Show this help message");
+                        println!("  --run <name>       Run a command inside a container");
+
+                     }// Gerbang Keamanan
+                     else {
+                        println!("{}Usage: melisa [options]{}", BOLD, RESET);
+                        println!("Options:");
+                        println!("  --help             Show this help message");
+                        println!("  --setup            Setup LXC environment (install dependencies, etc.)");
+                        println!("  --create <name>    Create a new LXC container");
+                        println!("  --delete <name>    Delete an existing LXC container");
+                        println!("  --run <name>       Run a command inside a container");
+                        println!("  --use <name>       Attach to a container interactively");
+                        println!("  --stop <name>      Stop a running container");
+                        println!("  --list             List all containers");
+                        println!("  --active           List only active (running) containers");
+                        println!("  --add <user>       Add a user to Melisa access list");
+                        println!("  --remove <user>    Remove a user from Melisa access list");
+                        println!("  --users            List all users with Melisa access");
+                        println!("  --upgrade <user>   Upgrade a user's permissions (e.g., to sudo)");
+                        println!("  --clean            Clean orphaned sudoers files for non-existent users");
+                        println!("  --upload <name> <dest_path>  Upload a file to a container");
+                        println!("  --share <name> <host_path> <cont_path>  Share a folder between host and container");
+                        println!("  --reshare <name> <host_path> <cont_path>  Remove a shared folder between host and container");
+                     }
+                    
                 },
                 "--setup" => {
                     install();
@@ -86,6 +98,13 @@ pub fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
                         add_shared_folder(name, host_p, cont_p);
                     } else {
                         println!("{}Usage: melisa --share <name> <host_path> <container_path>{}", RED, RESET);
+                    }
+                },
+                "--reshare" => {
+                    if let (Some(name), Some(host_p), Some(cont_p)) = (parts.get(2), parts.get(3), parts.get(4)) {
+                        remove_shared_folder(name, host_p, cont_p);
+                    } else {
+                        println!("{}Usage: melisa --reshare <name> <host_path> <container_path>{}", RED, RESET);
                     }
                 },
                 "--send" => {

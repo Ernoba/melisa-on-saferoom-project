@@ -274,6 +274,60 @@ pub fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
     }
 }
 
+pub fn remove_shared_folder(name: &str, host_path: &str, container_path: &str) {
+    let config_path = format!("{}/{}/config", LXC_PATH, name);
+    
+    // 1. Standarisasi path host agar match dengan yang ada di config
+    let abs_host_path = std::fs::canonicalize(host_path)
+        .expect("Path folder host tidak valid atau tidak ditemukan");
+    let host_path_str = abs_host_path.to_string_lossy();
+
+    if Path::new(&config_path).exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .expect("Gagal membaca konfigurasi container");
+
+        let target_entry = format!("lxc.mount.entry = {} {}", host_path_str, container_path);
+        let comment_tag = "# Shared Folder by MELISA";
+
+        let lines: Vec<&str> = content.lines().collect();
+        let mut new_lines = Vec::new();
+        let mut removed = false;
+
+        let mut i = 0;
+        while i < lines.len() {
+            // Cek apakah baris ini mengandung mount entry yang dicari
+            if lines[i].contains(&target_entry) {
+                // Opsional: Hapus komentar MELISA jika ada tepat di atas baris entry
+                if !new_lines.is_empty() && new_lines.last() == Some(&comment_tag) {
+                    new_lines.pop();
+                }
+                removed = true;
+                i += 1;
+                continue;
+            }
+            new_lines.push(lines[i]);
+            i += 1;
+        }
+
+        if !removed {
+            println!("{}[SKIP]{} Shared folder tidak ditemukan dalam konfigurasi.", YELLOW, RESET);
+            return;
+        }
+
+        // 2. Tulis ulang file tanpa baris yang dihapus
+        let new_content = new_lines.join("\n");
+        match std::fs::write(&config_path, new_content) {
+            Ok(_) => {
+                println!("{}[SUCCESS]{} Shared folder removed from {}.", GREEN, RESET, name);
+                println!("{}[IMPORTANT]{} Please restart the container to apply changes.", YELLOW, RESET);
+            },
+            Err(e) => eprintln!("{}[ERROR]{} Gagal memperbarui konfigurasi: {}", RED, RESET, e),
+        }
+    } else {
+        eprintln!("{}[ERROR]{} Container config tidak ditemukan.", RED, RESET);
+    }
+}
+
 //penanganan upload file ke container dengan tarball via stdin
 pub fn upload_to_container(name: &str, dest_path: &str) {
     let extract_cmd = format!("mkdir -p {} && tar -xzf - -C {}", dest_path, dest_path);

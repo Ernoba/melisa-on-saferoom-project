@@ -108,7 +108,6 @@ fn configure_sudoers(username: &str, role: UserRole) {
 
     match role {
         UserRole::Admin => {
-            // Kita gunakan "*" agar flexibel terhadap flag (seperti -f, -m, -r)
             commands.push("/usr/sbin/useradd *");
             commands.push("/usr/sbin/userdel *");
             commands.push("/usr/bin/passwd *");

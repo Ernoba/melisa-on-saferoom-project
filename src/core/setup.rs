@@ -3,9 +3,23 @@ use std::io::{self, Write};
 use std::fs::{self, OpenOptions};
 use std::path::Path;
 
+use crate::core::root_check::{check_root, is_ssh_session};
 use crate::cli::color_text::{GREEN, RED, CYAN, BOLD, RESET};
 
 pub fn install() {
+    if !check_root() {
+        println!("{}[ERROR] Setup harus dijalankan dengan hak akses root (Gunakan sudo).{}", RED, RESET);
+        std::process::exit(1);
+    }
+
+    // 2. Cek apakah ini SSH
+    if is_ssh_session() {
+        println!("\n{}[SECURITY ALERT]{} Perintah 'setup' DILARANG via SSH!", RED, RESET);
+        println!("{}Hanya user fisik (Host) yang boleh melakukan inisialisasi sistem.{}", BOLD, RESET);
+        println!("Silakan akses terminal langsung dari komputer host.");
+        std::process::exit(1); // Keluar paksa
+    }
+
     println!("\n{}MELISA SYSTEM & LXC INITIALIZATION (HOST MODE){}\n", BOLD, RESET);
 
     // Langkah 1: Verifikasi dan Laporan Lingkungan Data
