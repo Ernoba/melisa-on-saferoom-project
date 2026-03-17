@@ -14,7 +14,7 @@ pub enum UserRole {
 // --- USER MANAGEMENT ---
 
 pub async fn add_melisa_user(username: &str) {
-    if !ensure_admin() { return; } 
+    if !ensure_admin().await { return; } 
     println!("{}--- Adding New Melisa User: {} ---{}", BOLD, username, RESET);
 
     // Langkah 1: Tanya Role
@@ -76,7 +76,7 @@ pub async fn set_user_password(username: &str) -> bool {
 }
 
 pub async fn delete_melisa_user(username: &str) {
-    if !ensure_admin() { return; }
+    if !ensure_admin().await { return; }
     println!("{}--- Deleting User: {} ---{}", BOLD, username, RESET);
 
     println!("{}[INFO]{} Terminating all processes for user '{}'...", YELLOW, RESET, username);
@@ -135,7 +135,7 @@ async fn configure_sudoers(username: &str, role: UserRole) {
 }
 
 pub async fn list_melisa_users() {
-    if !ensure_admin() { return; }
+    if !ensure_admin().await { return; }
     println!("{}--- Registered Melisa Users ---{}", BOLD, RESET);
 
     let passwd_out = Command::new("grep")
@@ -150,7 +150,7 @@ pub async fn list_melisa_users() {
         for line in result.lines() {
             if let Some(user) = line.split(':').next() {
                 existing_users.push(user.to_string());
-                let tag = if check_if_admin(user) { 
+                let tag = if check_if_admin(user).await { 
                     format!("{}[ADMIN]{}", GREEN, RESET) 
                 } else { 
                     format!("{}[USER]{}", YELLOW, RESET) 
@@ -190,7 +190,7 @@ pub async fn list_melisa_users() {
 }
 
 pub async fn upgrade_user(username: &str) {
-    if !ensure_admin() { return; }
+    if !ensure_admin().await { return; }
     println!("{}--- Upgrading User Permissions: {} ---{}", BOLD, username, RESET);
 
     let check_user = Command::new("id").arg(username).output().await;
@@ -221,7 +221,7 @@ pub async fn upgrade_user(username: &str) {
 }
 
 pub async fn clean_orphaned_sudoers() {
-    if !ensure_admin() { return; }
+    if !ensure_admin().await { return; }
     println!("{}--- Cleaning Orphaned Sudoers ---{}", BOLD, RESET);
     
     let passwd_out = Command::new("grep")

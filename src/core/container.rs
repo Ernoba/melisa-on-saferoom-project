@@ -24,7 +24,7 @@ pub struct DistroMetadata {
 }
 
 pub async fn create_new_container(name: &str, meta: DistroMetadata) {
-    if !ensure_admin() { return; }
+    if !ensure_admin().await { return; }
     ensure_host_network_ready().await;
 
     println!("{}--- Creating Container: {} ({}) ---{}", BOLD, name, meta.slug, RESET);
@@ -190,7 +190,7 @@ async fn is_container_running(name: &str) -> bool {
 }
 
 pub async fn delete_container(name: &str) {
-    if !ensure_admin() { return; } 
+    if !ensure_admin().await { return; } 
     println!("{}--- Processing Deletion: {} ---{}", BOLD, name, RESET);
 
     // 1. Cek status (Gunakan .status() agar tidak gantung kalau sudo minta pass)
@@ -239,7 +239,7 @@ pub async fn attach_to_container(name: &str) {
 }
 
 pub async fn stop_container(name: &str) {
-    if !ensure_admin() { return; } // Gerbang Keamanan
+    if !ensure_admin().await { return; } // Gerbang Keamanan
     println!("{}[SHUTDOWN]{} Stopping container '{}'...", YELLOW, RESET, name);
 
     let process = Command::new("sudo")

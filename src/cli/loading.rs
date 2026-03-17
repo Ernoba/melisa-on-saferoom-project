@@ -11,7 +11,8 @@ where
     pb.set_style(
         ProgressStyle::default_spinner()
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-            .template("{spinner:.green} {msg}")
+            // Tambahin {elapsed_precise} biar keren kayak tool CLI pro
+            .template("{spinner:.green} [{elapsed_precise}] {msg}") 
             .unwrap(),
     );
     pb.set_message(message.to_string());

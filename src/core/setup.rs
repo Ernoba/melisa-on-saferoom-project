@@ -14,7 +14,7 @@ pub async fn install() {
         std::process::exit(1);
     }
 
-    if is_ssh_session() {
+    if is_ssh_session().await {
         println!("\n{}[SECURITY ALERT]{} Perintah 'setup' DILARANG via SSH!", RED, RESET);
         println!("{}Hanya user fisik (Host) yang boleh melakukan inisialisasi sistem.{}", BOLD, RESET);
         std::process::exit(1);

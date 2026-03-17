@@ -3,38 +3,81 @@ use tokio::process::Command;
 use crate::core::container::DistroMetadata;
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use tokio::time::sleep;
 
 const GLOBAL_CACHE: &str = "/tmp/melisa_global_distros.cache";
+const LOCK_FILE: &str = "/tmp/melisa_distro.lock";
 const CACHE_EXPIRY: u64 = 3600; 
 
 pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
     let cache_exists = Path::new(GLOBAL_CACHE).exists();
     
-    if cache_exists && is_cache_fresh(GLOBAL_CACHE) {
+    // 1. Cek super cepat: Kalau cache fresh dan NGGAK ada yang lagi nge-lock, langsung ambil.
+    if cache_exists && is_cache_fresh(GLOBAL_CACHE) && !Path::new(LOCK_FILE).exists() {
         if let Ok(content) = fs::read_to_string(GLOBAL_CACHE) {
             return (parse_distro_list(&content), true);
         }
     }
 
-    // GANTI DI SINI: Panggil lxc-download langsung untuk bypass pengecekan nama kontainer
-    // Kita coba dua lokasi umum, biasanya di Fedora ada di /usr/share/lxc/templates/
+    // 2. Mekanisme Locking yang lebih ketat
+    let mut retry_count = 0;
+    let max_retries = 40; // Kita kasih waktu lebih lama (20 detik) karena lxc-download emang lemot
+
+    loop {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true) // Cuma satu orang yang boleh menang di sini
+            .open(LOCK_FILE) 
+        {
+            Ok(_) => {
+                // KITA PEMENANGNYA: Kita yang dapet mandat buat update cache
+                break; 
+            }
+            Err(_) => {
+                // ADA USER LAIN: Waiter harus sabar nunggu sampai LOCK_FILE dihapus sama si pemenang
+                if retry_count >= max_retries {
+                    if cache_exists {
+                        if let Ok(old_content) = fs::read_to_string(GLOBAL_CACHE) {
+                            return (parse_distro_list(&old_content), true);
+                        }
+                    }
+                    break; 
+                }
+
+                // Cek apakah lock sudah dilepas (artinya si pemenang beres nulis)
+                if !Path::new(LOCK_FILE).exists() {
+                    if let Ok(content) = fs::read_to_string(GLOBAL_CACHE) {
+                        return (parse_distro_list(&content), true);
+                    }
+                }
+
+                sleep(Duration::from_millis(500)).await;
+                retry_count += 1;
+            }
+        }
+    }
+
+    // 3. Eksekusi Penarikan Data (Hanya dijalankan oleh si pemenang Lock)
+    // Mencoba lxc-download langsung
     let output = Command::new("sudo")
         .args(&["/usr/share/lxc/templates/lxc-download", "--list"])
         .output()
         .await;
 
-    match output {
+    let result = match output {
         Ok(out) if out.status.success() => {
             let content = String::from_utf8_lossy(&out.stdout);
             if !content.is_empty() {
                 let _ = fs::write(GLOBAL_CACHE, content.to_string());
                 let _ = Command::new("sudo").args(&["chmod", "666", GLOBAL_CACHE]).status().await;
-                return (parse_distro_list(&content), false);
+                (parse_distro_list(&content), false)
+            } else {
+                (Vec::new(), false)
             }
         },
         _ => {
-            // Jika cara pertama gagal (mungkin path beda), coba cara "dummy name" sebagai fallback
+            // Fallback kalau lxc-download path salah
             let fallback = Command::new("sudo")
                 .args(&["lxc-create", "-n", "MELISA_PROBE_UNUSED", "-t", "download", "--", "--list"])
                 .output()
@@ -44,27 +87,39 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
                 let content = String::from_utf8_lossy(&out.stdout);
                 if out.status.success() && !content.is_empty() {
                     let _ = fs::write(GLOBAL_CACHE, content.to_string());
-                    return (parse_distro_list(&content), false);
+                    let _ = Command::new("sudo").args(&["chmod", "666", GLOBAL_CACHE]).status().await;
+                    (parse_distro_list(&content), false)
+                } else {
+                    (Vec::new(), false)
                 }
-            }
-
-            if cache_exists {
-                if let Ok(old_content) = fs::read_to_string(GLOBAL_CACHE) {
-                    return (parse_distro_list(&old_content), true);
+            } else {
+                if cache_exists {
+                    if let Ok(old_content) = fs::read_to_string(GLOBAL_CACHE) {
+                        (parse_distro_list(&old_content), true)
+                    } else {
+                        (Vec::new(), false)
+                    }
+                } else {
+                    (Vec::new(), false)
                 }
             }
         }
-    }
+    };
 
-    (Vec::new(), false)
+    // 4. KRITIKAL: Hapus lock biar user lain nggak nunggu selamanya!
+    let _ = fs::remove_file(LOCK_FILE);
+    
+    result
 }
 
 fn is_cache_fresh(path: &str) -> bool {
     if let Ok(meta) = fs::metadata(path) {
         if let Ok(mtime) = meta.modified() {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-            let last_mod = mtime.duration_since(UNIX_EPOCH).unwrap().as_secs();
-            return now - last_mod < CACHE_EXPIRY;
+            if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                if let Ok(last_mod) = mtime.duration_since(UNIX_EPOCH) {
+                    return now.as_secs() - last_mod.as_secs() < CACHE_EXPIRY;
+                }
+            }
         }
     }
     false

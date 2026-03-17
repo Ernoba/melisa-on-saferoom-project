@@ -1,4 +1,4 @@
-use tokio::fs; // Gunakan tokio::fs untuk operasi async
+use tokio::fs; 
 use rustyline::{Editor, Config};
 use rustyline::error::ReadlineError;
 use rustyline::history::FileHistory;
@@ -7,10 +7,11 @@ use rustyline::highlight::MatchingBracketHighlighter;
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::MatchingBracketValidator;
 
-use crate::cli::color_text::{BOLD, RESET};
+use crate::cli::color_text::{RED, RESET, BOLD};
 use crate::cli::helper::MelisaHelper;
 use crate::cli::prompt::Prompt;
 use crate::cli::executor::{execute_command, ExecResult};
+use crate::cli::prompt::reset_history;
 
 // 1. Ubah menjadi pub async fn
 pub async fn melisa() {
@@ -39,35 +40,38 @@ pub async fn melisa() {
     println!("{BOLD}Authenticated as melisa. Access granted.{RESET}");
 
     loop {
-        let prompt_str: String = p_info.build();
+        let prompt_str = p_info.build();
 
-        // Note: rl.readline tetap memblokir thread saat menunggu input.
-        // Dalam aplikasi CLI tunggal seperti Melisa, ini tidak masalah.
         match rl.readline(&prompt_str) {
             Ok(line) => {
-                let input: &str = line.trim();
-                
+                let input = line.trim();
                 if input.is_empty() { continue; }
 
-                // 3. Await execute_command
-                // Pastikan fungsi execute_command di executor.rs juga sudah 'async'
+                // --- DI SINI TEMPATNYA ---
+                // Kita panggil executor, lalu tangani hasilnya di sini
                 match execute_command(input, &p_info.user, &p_info.home).await {
-                    ExecResult::Break => {
-                        let _ = rl.save_history(history_path);
-                        break;
+                    ExecResult::ResetHistory => {
+                        // Karena 'rl' dan 'history_path' ada di scope fungsi melisa() ini,
+                        // kita bisa memanggil fungsi reset_history dengan aman.
+                        reset_history(&mut rl, history_path).await;
                     },
-                    ExecResult::Error(e) => eprintln!("{}", e),
                     ExecResult::Continue => {
+                        // Command biasa berhasil, simpan ke history
                         let _ = rl.add_history_entry(input);
                         let _ = rl.save_history(history_path); 
+                    },
+                    ExecResult::Break => {
+                        let _ = rl.save_history(history_path);
+                        break; // Keluar dari loop (exit melisa)
+                    },
+                    ExecResult::Error(e) => {
+                        eprintln!("{RED}[ERROR]{RESET} {}", e);
                     }
                 }
+                // -------------------------
             },
             Err(ReadlineError::Interrupted) => continue,
-            Err(ReadlineError::Eof) => {
-                let _ = rl.save_history(history_path);
-                break;
-            },
+            Err(ReadlineError::Eof) => break,
             _ => break,
         }
     }

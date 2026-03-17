@@ -16,6 +16,7 @@ use crate::core::user_management::{
 pub enum ExecResult {
     Continue,
     Break,
+    ResetHistory,
     Error(String),
 }
 
@@ -30,7 +31,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
 
             match sub_cmd {
                 "--help" | "-h" => {
-                    if !admin_check() {
+                    if !admin_check().await {
                         println!("{}Usage: melisa [options]{}", BOLD, RESET);
                         println!("Options:");
                         println!("  --help             Show this help message");
@@ -42,6 +43,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("Options:");
                         println!("  --help             Show this help message");
                         println!("  --setup            Setup LXC environment (install dependencies, etc.)");
+                        println!("  --clear            Clear history data/history.txt");
                         println!("  --search <keyword> Search available LXC distros by keyword");
                         println!("  --create <name> <distro_code>  Create a new LXC container");
                         println!("  --delete <name>    Delete an existing LXC container");
@@ -64,6 +66,14 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     // Jika install() melakukan operasi I/O berat, 
                     // pertimbangkan menjadikannya async juga
                     install().await;
+                },
+                "--clear" => {
+                    // Panggil fungsi simpel tadi
+                    if !admin_check().await {
+                        println!("{}[ERROR]{} You don't have permission to clear history.{}", RED, RESET, user);
+                        return ExecResult::Continue;
+                    }
+                    return ExecResult::ResetHistory
                 },
                 "--search" => {
                     let keyword = parts.get(2).unwrap_or(&"").to_lowercase();
@@ -169,7 +179,10 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 // 2. Tambahkan .await pada pemanggilan Command luar (jika ada)
                 "--run" => {
                     if let Some(name) = parts.get(2) {
-                        start_container(name).await; // Jika ini memanggil LXC, jadikan async
+                        start_container(name).await;
+                    } else {
+                        // Tambahkan feedback jika nama kosong
+                        println!("{}[ERROR]{} Nama container harus diisi! Contoh: melisa --run mybox", RED, RESET);
                     }
                 },
                 "--use" => {
