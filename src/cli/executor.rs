@@ -7,11 +7,12 @@ use crate::core::setup::install;
 use crate::core::root_check::admin_check;
 use crate::distros::distro::get_lxc_distro_list;
 use crate::cli::loading::execute_with_spinner;
-use crate::cli::color_text::{RED, GREEN, YELLOW, BOLD, RESET};
+use crate::cli::color_text::{RED, GREEN, BLUE, YELLOW, BOLD, RESET};
 use crate::core::user_management::{
     add_melisa_user, set_user_password, delete_melisa_user, 
     list_melisa_users, upgrade_user, clean_orphaned_sudoers
 };
+use crate::core::project_management::PROJECTS_MASTER;
 
 pub enum ExecResult {
     Continue,
@@ -56,6 +57,12 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("  --remove <user>    Remove a user from Melisa access list");
                         println!("  --users            List all users with Melisa access");
                         println!("  --upgrade <user>   Upgrade a user's permissions (e.g., to sudo)");
+                        println!("  --new_project <name>  Create a new master project (Admin only)");
+                        println!("  --delete_project <name> remove your project");
+                        println!("  --invite <project> <user1> <user2> ...  Invite users to a project (Admin only)");
+                        println!("  --out <project> <user1> <user2> ...  Out users from project");
+                        println!("  --projects         Show all projects");
+                        println!("  --pull             merge code from user to master");
                         println!("  --clean            Clean orphaned sudoers files for non-existent users");
                         println!("  --upload <name> <dest_path>  Upload a file to a container");
                         println!("  --share <name> <host_path> <cont_path>  Share a folder between host and container");
@@ -284,7 +291,202 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 },
                 "--clean" => {
                     clean_orphaned_sudoers().await;
+                },
+                "--new_project" => {
+                    if !admin_check().await {
+                        println!("{}[ERROR]{} Hanya Admin yang bisa membuat project baru!", RED, RESET);
+                        return ExecResult::Continue;
+                    }
+
+                    if let Some(project_name) = parts.get(2) {
+                        let master_path = format!("{}/{}", PROJECTS_MASTER, project_name);
+                        let status = Command::new("mkdir")
+                            .args(&["-p", &master_path])
+                            .status().await;
+
+                        // PERBAIKAN DI SINI:
+                        match status {
+                            Ok(s) if s.success() => {
+                                let _ = Command::new("chmod").args(&["770", &master_path]).status().await;
+                                println!("{}[SUCCESS]{} Master Project '{}' telah dibuat.", GREEN, RESET, project_name);
+                            }
+                            _ => eprintln!("{}[ERROR]{} Gagal membuat folder master di root.", RED, RESET),
+                        }
+                    } else {
+                        println!("Usage: melisa --new_project <project_name>");
+                    }
                 },        
+                "--invite" => {
+                    if !admin_check().await {
+                        println!("{}[ERROR]{} Hanya Admin yang bisa mengundang user!", RED, RESET);
+                        return ExecResult::Continue;
+                    }
+
+                    if parts.len() < 4 {
+                        println!("Usage: melisa --invite <project_name> <user1> <user2> ...");
+                        return ExecResult::Continue;
+                    }
+
+                    let project_name = parts[2];
+                    let invited_users = &parts[3..];
+                    let master_path = format!("{}/{}", PROJECTS_MASTER, project_name);
+
+                    // Cek apakah master project ada
+                    if !std::path::Path::new(&master_path).exists() {
+                        println!("{}[ERROR]{} Master Project '{}' tidak ditemukan!", RED, RESET, project_name);
+                        return ExecResult::Continue;
+                    }
+
+                    for username in invited_users {
+                        let user_project_path = format!("/home/{}/{}", username, project_name);
+                        let create_status = Command::new("mkdir")
+                            .args(&["-p", &user_project_path])
+                            .status().await;
+
+                        // PERBAIKAN DI SINI:
+                        match create_status {
+                            Ok(s) if s.success() => {
+                                let _ = Command::new("chown")
+                                    .args(&["-R", &format!("{}:{}", username, username), &user_project_path])
+                                    .status().await;
+                                println!("{}[INVITED]{} User '{}' masuk ke project '{}'.", GREEN, RESET, username, project_name);
+                            }
+                            _ => eprintln!("{}[ERROR]{} Gagal menyiapkan folder untuk user '{}'.", RED, RESET, username),
+                        }
+                    }
+                },
+                "--pull" => {
+                    // melisa --pull my-web fuaida
+                    // Perintah ini akan menyalin isi dari /home/fuaida/my-web ke /opt/melisa/projects/my-web
+                    let project_name = parts[2];
+                    let from_user = parts[3];
+                    
+                    let src = format!("/home/{}/{}/.", from_user, project_name);
+                    let dest = format!("{}/{}/", PROJECTS_MASTER, project_name);
+
+                    let _ = Command::new("rsync")
+                        .args(&["-av", &src, &dest])
+                        .status().await;
+                    
+                    println!("{}[SYNC]{} Code dari user '{}' telah ditarik ke Master.", GREEN, RESET, from_user);
+                },
+                "--projects" => {
+                    let is_admin = admin_check().await; //
+                    println!("{}--- MELISA PROJECT DASHBOARD ---{}", BOLD, RESET);
+
+                    if is_admin {
+                        // Logika Admin: Melihat semua Master Project di Root
+                        let output = Command::new("ls")
+                            .args(&["-1", PROJECTS_MASTER])
+                            .output().await;
+
+                        match output {
+                            Ok(out) if out.status.success() => {
+                                let list = String::from_utf8_lossy(&out.stdout);
+                                if list.trim().is_empty() {
+                                    println!("  {}Belum ada Master Project yang dibuat.{}", YELLOW, RESET);
+                                } else {
+                                    println!("{}Master Projects (Root):{}", BOLD, RESET);
+                                    for project in list.lines() {
+                                        println!("  {} [MASTER] {}{}", GREEN, project, RESET);
+                                    }
+                                }
+                            },
+                            _ => eprintln!("{}[ERROR]{} Gagal mengakses direktori master.", RED, RESET),
+                        }
+                    } else {
+                        // Logika User Reguler: Melihat project di folder Home mereka
+                        // Kita tampilkan folder di HOME kecuali folder sistem 'data'
+                        let output = Command::new("ls")
+                            .args(&["-F", home]) 
+                            .output().await;
+
+                        if let Ok(out) = output {
+                            let list = String::from_utf8_lossy(&out.stdout);
+                            let mut found = false;
+                            
+                            println!("{}Your Active Projects (Branches):{}", BOLD, RESET);
+                            for entry in list.lines() {
+                                // Filter: Hanya tampilkan folder (akhiran /) dan bukan folder sistem 'data/'
+                                if entry.ends_with('/') && entry != "data/" {
+                                    println!("  {} [BRANCH] {}{}", BLUE, entry.trim_end_matches('/'), RESET);
+                                    found = true;
+                                }
+                            }
+                            
+                            if !found {
+                                println!("  {}Kamu belum diundang ke project manapun.{}", YELLOW, RESET);
+                            }
+                        }
+                    }
+                },
+                "--delete_project" => {
+                    if !admin_check().await {
+                        println!("{}[ERROR]{} Hanya Admin yang bisa menghapus project!", RED, RESET);
+                        return ExecResult::Continue;
+                    }
+
+                    if let Some(project_name) = parts.get(2) {
+                        let master_path = format!("{}/{}", PROJECTS_MASTER, project_name);
+
+                        // 1. Cek apakah master project ada
+                        if !std::path::Path::new(&master_path).exists() {
+                            println!("{}[ERROR]{} Master Project '{}' tidak ditemukan!", RED, RESET, project_name);
+                            return ExecResult::Continue;
+                        }
+
+                        // 2. Hapus Master Project (Root)
+                        let _ = Command::new("rm").args(&["-rf", &master_path]).status().await;
+
+                        // 3. Hapus otomatis dari SEMUA user yang terdaftar di Melisa
+                        let passwd_out = Command::new("grep")
+                            .args(&["/usr/local/bin/melisa", "/etc/passwd"])
+                            .output().await;
+
+                        if let Ok(out) = passwd_out {
+                            let result = String::from_utf8_lossy(&out.stdout);
+                            for line in result.lines() {
+                                if let Some(username) = line.split(':').next() {
+                                    let user_project_path = format!("/home/{}/{}", username, project_name);
+                                    // Hapus folder project di home user jika ada
+                                    let _ = Command::new("rm").args(&["-rf", &user_project_path]).status().await;
+                                }
+                            }
+                        }
+                        println!("{}[SUCCESS]{} Project '{}' telah dihapus total dari Master & semua User.", GREEN, RESET, project_name);
+                    } else {
+                        println!("Usage: melisa --delete_project <project_name>");
+                    }
+                },
+
+                "--out" => {
+                    if !admin_check().await {
+                        println!("{}[ERROR]{} Hanya Admin yang bisa mengeluarkan user!", RED, RESET);
+                        return ExecResult::Continue;
+                    }
+
+                    if parts.len() < 4 {
+                        println!("Usage: melisa --out <project_name> <user1> <user2> ...");
+                        return ExecResult::Continue;
+                    }
+
+                    let project_name = parts[2];
+                    let targets = &parts[3..];
+
+                    for username in targets {
+                        let user_project_path = format!("/home/{}/{}", username, project_name);
+                        
+                        // Eksekusi penghapusan folder di home user tersebut
+                        let status = Command::new("rm").args(&["-rf", &user_project_path]).status().await;
+
+                        match status {
+                            Ok(s) if s.success() => {
+                                println!("{}[OUT]{} User '{}' telah dikeluarkan dari project '{}'.", YELLOW, RESET, username, project_name);
+                            }
+                            _ => eprintln!("{}[ERROR]{} Gagal menghapus folder project untuk user '{}'.", RED, RESET, username),
+                        }
+                    }
+                },
                 "" => {
                     println!("{}Usage: melisa [options]{}", RED, RESET);
                     println!("Try 'melisa --help' for more information.");

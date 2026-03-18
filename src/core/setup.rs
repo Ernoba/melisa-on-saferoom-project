@@ -6,6 +6,7 @@ use std::process::Stdio;
 
 use crate::core::root_check::{check_root, is_ssh_session};
 use crate::cli::color_text::{GREEN, RED, CYAN, BOLD, RESET};
+use crate::core::project_management::PROJECTS_MASTER;
 
 pub async fn install() {
     // Check root (biasanya sync tidak apa-apa, tapi kita ikuti alur async)
@@ -47,6 +48,7 @@ pub async fn install() {
     // 4. Konfigurasi Jaringan & Keamanan
     setup_ssh_firewall().await;
     setup_lxc_network_quota().await;
+    setup_projects_directory().await;
     fix_shared_folder_permission("data").await;
     fix_uidmap_permissions().await;
     fix_system_privacy().await;
@@ -196,6 +198,37 @@ async fn fix_uidmap_permissions() {
 
 async fn fix_shared_folder_permission(host_path: &str) {
     let _ = Command::new("chown").args(&["-R", "100000:100000", host_path]).status().await;
+}
+
+// Tambahkan fungsi ini di src/core/setup.rs
+async fn setup_projects_directory() {
+    println!("\n{}Configuring Master Projects Infrastructure...{}", BOLD, RESET);
+
+    // 1. Buat direktori utama jika belum ada
+    let mkdir_status = Command::new("sudo")
+        .args(&["mkdir", "-p", PROJECTS_MASTER])
+        .status()
+        .await;
+
+    match mkdir_status {
+        Ok(s) if s.success() => {
+            // 2. Set permission ke 755 agar folder bisa di-list oleh user (r-x) 
+            // tapi hanya root/admin yang bisa menulis (w).
+            let chmod_status = Command::new("sudo")
+                .args(&["chmod", "755", PROJECTS_MASTER])
+                .status()
+                .await;
+
+            if let Ok(cs) = chmod_status {
+                if cs.success() {
+                    println!("  {:<50} [ {}OK{} ]", "Master projects directory initialized", GREEN, RESET);
+                } else {
+                    println!("  {:<50} [ {}FAILED{} ]", "Failed to set permissions for projects folder", RED, RESET);
+                }
+            }
+        }
+        _ => println!("  {:<50} [ {}FAILED{} ]", "Could not create projects directory", RED, RESET),
+    }
 }
 
 // Di src/core/setup.rs

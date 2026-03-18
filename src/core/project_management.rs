@@ -1,0 +1,1 @@
+pub const PROJECTS_MASTER: &str = "/opt/melisa/projects";
