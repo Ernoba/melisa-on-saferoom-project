@@ -49,6 +49,7 @@ pub async fn install() {
     setup_lxc_network_quota().await;
     fix_shared_folder_permission("data").await;
     fix_uidmap_permissions().await;
+    fix_system_privacy().await;
 
     if let Ok(user) = std::env::var("SUDO_USER") {
         setup_user_mapping(&user).await;
@@ -195,6 +196,14 @@ async fn fix_uidmap_permissions() {
 
 async fn fix_shared_folder_permission(host_path: &str) {
     let _ = Command::new("chown").args(&["-R", "100000:100000", host_path]).status().await;
+}
+
+// Di src/core/setup.rs
+async fn fix_system_privacy() {
+    println!("\nHardening System Privacy...");
+    // Menghapus izin baca (r) pada /home agar user tidak bisa 'ls /home'
+    let _ = Command::new("sudo").args(&["chmod", "711", "/home"]).status().await;
+    println!("  {:<50} [ {}OK{} ]", "Directory /home is now unlistable", GREEN, RESET);
 }
 
 async fn setup_user_mapping(username: &str) {

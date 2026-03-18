@@ -42,8 +42,14 @@ pub async fn add_melisa_user(username: &str) {
     match status {
         Ok(s) if s.success() => {
             println!("{}[SUCCESS]{} User '{}' created.", GREEN, RESET, username);
-            
-            // Langkah 3 & 4
+
+            // EKSEKUSI ISOLASI FOLDER
+            let folder_path = format!("/home/{}", username);
+            let _ = Command::new("sudo")
+                .args(&["chmod", "700", &folder_path])
+                .status()
+                .await;
+
             if set_user_password(username).await {
                 configure_sudoers(username, role).await;
             }
@@ -112,7 +118,10 @@ async fn configure_sudoers(username: &str, role: UserRole) {
                 "/usr/sbin/useradd *", "/usr/sbin/userdel *", "/usr/bin/passwd *",
                 "/usr/bin/pkill *", "/usr/bin/grep *", "/usr/bin/lxc-info *",
                 "/usr/bin/ls /etc/sudoers.d/", "/usr/bin/rm -f /etc/sudoers.d/melisa_*",
-                "/usr/bin/tee /etc/sudoers.d/melisa_*"
+                "/usr/bin/tee /etc/sudoers.d/melisa_*",
+                "/usr/bin/chmod *", "/usr/sbin/chmod *", 
+                "/usr/bin/chown *", "/usr/sbin/chown *",
+                "/usr/bin/mkdir *"
             ]);
         },
         UserRole::Regular => {}

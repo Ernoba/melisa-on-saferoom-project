@@ -39,29 +39,29 @@ pub async fn admin_check() -> bool {
 }
 
 // chek apakah user ssh atau host
+// Di src/core/root_check.rs
 pub async fn is_ssh_session() -> bool {
-    // Metode 1: Cek Environment Variables (Cepat)
-    // Saat login via SSH, variabel ini otomatis ada.
-    if env::var("SSH_CLIENT").is_ok() || env::var("SSH_TTY").is_ok() || env::var("SSH_CONNECTION").is_ok() {
+    // 1. Cek Environment Variables (Pastikan isinya tidak kosong)
+    if !env::var("SSH_CLIENT").unwrap_or_default().is_empty() || 
+       !env::var("SSH_TTY").unwrap_or_default().is_empty() || 
+       !env::var("SSH_CONNECTION").unwrap_or_default().is_empty() {
         return true;
     }
 
-    // Metode 2: Verifikasi via perintah 'who -m' (Lebih Akurat)
-    // 'who -m' akan menampilkan detail terminal yang sedang digunakan.
-    // Jika ada alamat IP/hostname dalam kurung di akhir, itu adalah SSH.
+    // 2. Verifikasi via 'who -m'
     let output = Command::new("who")
         .arg("-m")
         .output()
-        .await; // <--- WAJIB AWAIT
+        .await;
 
     if let Ok(out) = output {
         let status = String::from_utf8_lossy(&out.stdout);
-        // Sesi SSH biasanya terlihat seperti: "user pts/0 2026-03-17 (192.168.1.5)"
-        // Sesi lokal biasanya terlihat seperti: "user tty1 2026-03-17"
-        if status.contains('(') && status.contains(')') {
-            return true;
+        // PERBAIKAN: Hanya anggap SSH jika ada kurung DAN bukan merupakan display lokal (:0)
+        // Di src/core/root_check.rs, ubah bagian ini:
+            if status.contains('(') && status.contains(')') && !status.contains("(:") {
+                return true; // Hanya anggap SSH jika bukan display lokal (:0)
+            }
         }
-    }
 
     false
 }

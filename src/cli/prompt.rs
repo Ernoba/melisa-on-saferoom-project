@@ -20,7 +20,7 @@ impl Prompt {
             .unwrap_or_else(|_| "unknown".to_string());
         
         // Internal Melisa tetap mengacu ke /root
-        let home = "/root".to_string(); 
+        let home = env::var("HOME").unwrap_or_else(|_| "/root".to_string());
 
         Self { user, home }
     }
