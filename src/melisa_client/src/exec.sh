@@ -135,24 +135,46 @@ exec_clone() {
 
     log_header "Cloning $project_name"
 
+    # --- LOGIKA ANTI-NESTED ---
+    # Jika folder saat ini namanya sudah sama dengan project_name, 
+    # gunakan "." (folder saat ini), jangan buat folder baru di dalamnya.
+    local target_dir="./$project_name"
+    if [ "$(basename "$PWD")" == "$project_name" ]; then
+        target_dir="."
+        log_info "Detected: Kamu sudah berada di folder project. Sinkronisasi ke folder ini."
+    fi
+
     if [ "$force_clone" = true ]; then
         log_info "Mode: Force (Rsync direct)"
         local remote_path="~/$project_name/" 
-        if rsync -avz --progress "$CONN:$remote_path" "./$project_name"; then
-            local full_path="$(realpath "./$project_name")"
+        
+        # Pastikan target_dir ada jika kita tidak di dalam folder project
+        [ "$target_dir" != "." ] && mkdir -p "$target_dir"
+
+        # PENTING: Gunakan trailing slash pada source DAN destination 
+        # agar rsync menyalin ISI folder, bukan foldernya itu sendiri.
+        if rsync -avz --progress "$CONN:$remote_path" "$target_dir/"; then
+            local full_path="$(realpath "$target_dir")"
             db_update_project "$project_name" "$full_path"
-            log_success "Sync complete."
-            inspect_result "./$project_name"
+            log_success "Sync complete di $full_path"
+            inspect_result "$target_dir"
         else
             log_error "Rsync failed. Check server path."
         fi
     else
         log_info "Mode: Git (Default)"
-        if git clone "ssh://$CONN/opt/melisa/projects/$project_name"; then
-            local full_path="$(realpath "./$project_name")"
+        
+        # Git tidak mau clone ke folder yang sudah ada isinya (non-empty)
+        if [ "$target_dir" == "." ] && [ "$(ls -A . 2>/dev/null)" ]; then
+            log_error "Folder sudah ada isinya. Gunakan --force untuk rsync atau pindah ke folder lain."
+            exit 1
+        fi
+
+        if git clone "ssh://$CONN/opt/melisa/projects/$project_name" "$target_dir"; then
+            local full_path="$(realpath "$target_dir")"
             db_update_project "$project_name" "$full_path"
-            log_success "Repo cloned."
-            inspect_result "./$project_name"
+            log_success "Repo cloned ke $full_path"
+            inspect_result "$target_dir"
         else
             log_error "Git clone failed."
         fi
@@ -162,82 +184,104 @@ exec_clone() {
 exec_sync() {
     ensure_connected
     
-    if [ ! -d .git ]; then
-        log_error "Not a git repo. Clone it first."
+    # 1. Identifikasi project berdasarkan lokasi saat ini
+    local project_name=$(db_identify_by_pwd)
+    
+    if [ -z "$project_name" ]; then
+        log_error "Folder ini tidak terdaftar sebagai project MELISA."
         exit 1
     fi
 
-    local project_name=$(basename "$PWD")
-    local branch=$(git branch --show-current)
+    # 2. Pindah ke root project agar operasi git akurat
+    local project_root=$(db_get_path "$project_name")
+    cd "$project_root" || { log_error "Gagal mengakses $project_root"; exit 1; }
 
+    local branch=$(git branch --show-current 2>/dev/null || echo "master")
     log_header "Syncing $project_name [$branch]"
     
-    # Preview apa yang mau dipush
-    git status --short
-    
+    # Menyiapkan commit otomatis
     git add .
     git commit -m "melisa-sync: $(date +'%Y-%m-%d %H:%M')" --allow-empty > /dev/null
     
-    log_info "Pushing to master..."
+    log_info "Pushing changes to server..."
     if git push -f origin "$branch" 2>&1 | sed 's/^/  /'; then
-        log_info "Updating server-side workdir..."
+        # Trigger update di sisi server
         ssh "$CONN" "melisa --update $project_name --force"
         
-        # Sync .env files
-        log_info "Injecting configs (.env)..."
-        find . -type f -name ".env" | while read -r env_file; do
-            rsync -azR "$env_file" "$CONN:~/$project_name/"
-        done
+        # 3. Sync file .env (Menggunakan -R untuk menjaga struktur folder)
+        log_info "Syncing configuration files (.env)..."
+        local env_files=$(find . -maxdepth 2 -type f -name ".env")
+        if [ -n "$env_files" ]; then
+            # Pastikan rsync membuat folder jika belum ada di remote
+            echo "$env_files" | xargs -I {} rsync -azR "{}" "$CONN:~/$project_name/"
+        fi
         
         log_success "Server is now up-to-date."
-        inspect_result "."
     else
-        log_error "Push failed."
+        log_error "Git push failed. Cek koneksi atau konfigurasi remote."
     fi
 }
 
 exec_get() {
     ensure_connected
     
-    local project_name=$1
+    local project_name=""
     local force_get=false
     
-    # Perbaikan parsing: cek jika argumen kedua adalah --force
-    [[ "$2" == "--force" ]] && force_get=true
+    # 1. Robust Argument Parsing
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --force) force_get=true; shift ;;
+            *) [ -z "$project_name" ] && project_name=$1; shift ;;
+        esac
+    done
+
+    # 2. Identifikasi Project
+    [ -z "$project_name" ] && project_name=$(db_identify_by_pwd)
 
     if [ -z "$project_name" ]; then
-        project_name=$(db_identify_by_pwd)
-        [ -z "$project_name" ] && { log_error "Project tidak teridentifikasi. Masukkan nama project."; exit 1; }
+        log_error "Project tidak dikenal. Gunakan: melisa get <nama> [--force]"
+        exit 1
     fi
 
-    # Mencari path lokal dari database atau folder saat ini
+    # 3. Penentuan Path (Anti-Nesting Logic)
     local local_path=$(db_get_path "$project_name")
-    [ -z "$local_path" ] && local_path="$PWD/$project_name"
+    
+    if [ -z "$local_path" ]; then
+        # Jika belum ada di DB, cek apakah kita sedang berada di folder dengan nama tersebut
+        if [ "$(basename "$PWD")" == "$project_name" ]; then
+            local_path="$(realpath .)"
+        else
+            # Jika tidak, buat folder baru di lokasi saat ini
+            local_path="$(realpath .)/$project_name"
+        fi
+    fi
 
     log_header "Pulling $project_name data"
 
+    # 4. Rsync Execution
     local remote_path="~/$project_name/"
-    
-    # 1. Tentukan flag rsync
     local opts="-avz --progress --exclude='.git/'"
     
-    if [ "$force_get" = false ]; then
-        log_info "Mode: Safe (Hanya ambil file baru, abaikan yang sudah ada)"
-        # GANTI -u DENGAN --ignore-existing
-        opts="$opts --ignore-existing"
+    # Menentukan mode rsync
+    if [ "$force_get" = true ]; then
+        log_info "Mode: Force (Full Overwrite)"
     else
-        log_info "Mode: Force (Sinkronisasi penuh, file lokal akan ditimpa)"
+        log_info "Mode: Safe (Ignore existing)"
+        opts="$opts --ignore-existing"
     fi
 
-    # 2. Eksekusi rsync
-    # Pastikan local_path ada agar tidak berantakan
     mkdir -p "$local_path"
 
+    # Eksekusi rsync dengan trailing slash agar menyalin ISI folder
     if rsync $opts "$CONN:$remote_path" "$local_path/"; then
-        log_success "Data berhasil ditarik."
+        # 5. Update Metadata Registry
+        db_update_project "$project_name" "$local_path"
+        
+        log_success "Sync selesai di: $local_path"
         inspect_result "$local_path"
     else
-        log_error "Terjadi kesalahan pada Rsync."
+        log_error "Rsync gagal. Pastikan folder $project_name ada di server."
     fi
 }
 

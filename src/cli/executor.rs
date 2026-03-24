@@ -35,7 +35,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 "--help" | "-h" => {
                     let is_admin = admin_check().await;
                     
-                    println!("\n{}MELISA CONTROL INTERFACE - VERSION 3.0.0{}", BOLD, RESET);
+                    println!("\n{}MELISA CONTROL INTERFACE - VERSION 0.1.2{}", BOLD, RESET);
                     println!("Usage: melisa [options]\n");
 
                     println!("{}GENERAL COMMANDS{}", BOLD, RESET);

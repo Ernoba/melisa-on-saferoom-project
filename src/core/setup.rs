@@ -1,6 +1,7 @@
 use tokio::process::Command;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::fs::{self, OpenOptions};
+use tokio::time::{timeout, Duration};
 use std::path::Path;
 use std::process::Stdio;
 
@@ -9,24 +10,30 @@ use crate::cli::color_text::{GREEN, RED, CYAN, BOLD, RESET};
 use crate::core::project_management::PROJECTS_MASTER;
 
 pub async fn install() {
-    // 1. Verifikasi Hak Akses & Keamanan Sesi
+    // 1. Access & Security Verification
     if !check_root() {
-        eprintln!("{}[ERROR] Setup harus dijalankan dengan hak akses root (Gunakan sudo).{}", RED, RESET);
+        eprintln!("{}[CRITICAL ERROR] Setup must be executed with root privileges (Use sudo).{}", RED, RESET);
         std::process::exit(1);
     }
 
     if is_ssh_session().await {
-        println!("\n{}[SECURITY ALERT]{} Perintah 'setup' DILARANG via SSH!", RED, RESET);
-        println!("{}Hanya user fisik (Host) yang boleh melakukan inisialisasi sistem.{}", BOLD, RESET);
+        println!("\n{}[SECURITY ALERT]{} The 'setup' command is STRICTLY FORBIDDEN via SSH!", RED, RESET);
+        println!("{}Only a physical user (Host) is authorized to perform system initialization.{}", BOLD, RESET);
         std::process::exit(1);
     }
 
     println!("\n{}MELISA SYSTEM & LXC INITIALIZATION (HOST MODE){}\n", BOLD, RESET);
 
-    // 2. Verifikasi Lingkungan Lokal
+    // 1.5 Pre-flight Dependency Check
+    if !check_required_tools().await {
+        eprintln!("\n{}CRITICAL_FAILURE: The system is missing fundamental utilities required for deployment.{}", RED, RESET);
+        std::process::exit(1);
+    }
+
+    // 2. Local Environment Verification
     verify_data_environment().await;
 
-    // 3. Instalasi Paket (Daftar perintah sistem)
+    // 3. Package Installation (System command definitions)
     let commands = vec![
         ("Synchronizing package repositories", "dnf", vec!["update", "-y"]),
         ("Installing Virtualization & Bridge tools", "dnf", vec!["install", "-y", "lxc", "lxc-templates", "libvirt", "bridge-utils"]),
@@ -35,14 +42,16 @@ pub async fn install() {
         ("Enabling LXC, SSH, & Firewall services", "systemctl", vec!["enable", "--now", "lxc.service", "lxc-net.service", "sshd", "firewalld"]),
     ];
 
+    // Allocate 10 minutes (600 seconds) timeout for heavy operations like dnf, 60 seconds for others
     for (desc, prog, args) in commands {
-        if !execute_step(desc, prog, &args).await {
-            eprintln!("\n{}CRITICAL_FAILURE: Setup terminated at step '{}'{}", RED, desc, RESET);
+        let timeout_limit = if prog == "dnf" { 600 } else { 60 };
+        if !execute_step(desc, prog, &args, timeout_limit).await {
+            eprintln!("\n{}CRITICAL_FAILURE: Deployment terminated abruptly at step '{}'{}", RED, desc, RESET);
             std::process::exit(1);
         }
     }
 
-    // 4. Deployment & Konfigurasi Infrastruktur
+    // 4. Infrastructure Deployment & Configuration
     deploy_melisa_binary().await;
     setup_ssh_firewall().await;
     setup_lxc_network_quota().await;
@@ -52,41 +61,115 @@ pub async fn install() {
     fix_uidmap_permissions().await;
     fix_system_privacy().await;
 
-    // Mapping SubUID/SubGID untuk user yang menjalankan sudo
-    if let Ok(user) = std::env::var("SUDO_USER") {
-        setup_user_mapping(&user).await;
+    // SubUID/SubGID Mapping for the user executing sudo
+    match std::env::var("SUDO_USER") {
+        Ok(user) if !user.is_empty() => setup_user_mapping(&user).await,
+        Ok(_) | Err(_) => println!("  {:<50} [ {}WARNING{} ] SUDO_USER variable is missing; skipping user mapping.", "User Mapping", RED, RESET),
     }
 
-    // 5. Finalisasi Shell
+    // 5. Shell Finalization
     register_melisa_shell().await;
     configure_sudoers_access().await;
 
     println!("\n{}VERIFYING SYSTEM CONFIGURATION...{}", BOLD, RESET);
-    let _ = Command::new("lxc-checkconfig").status().await;
+    let verify_status = timeout(Duration::from_secs(30), Command::new("lxc-checkconfig").status()).await;
+    match verify_status {
+        Ok(Ok(status)) if status.success() => println!("  {:<50} [ {}PASSED{} ]", "LXC Kernel Support", GREEN, RESET),
+        _ => println!("  {:<50} [ {}WARNING{} ] lxc-checkconfig encountered anomalies.", "System Verify", RED, RESET),
+    }
 
     println!("\n{}MELISA HOST DEPLOYMENT COMPLETED SUCCESSFULLY{}\n", GREEN, RESET);
-    println!("{}STATUS: SSH Aktif, Jail Shell Terpasang, & Network Bridge Siap.{}", CYAN, RESET);
+    println!("{}STATUS: SSH Active, Jail Shell Deployed, & Network Bridge Ready.{}", CYAN, RESET);
 }
 
-async fn execute_step(description: &str, program: &str, args: &[&str]) -> bool {
+// =====================================================================
+// UTILITY FUNCTIONS 
+// =====================================================================
+
+async fn execute_silent_task(program: &str, args: &[&str], description: &str, timeout_secs: u64) -> bool {
+    let mut cmd = Command::new(program);
+    cmd.args(args).stdout(Stdio::null()).stderr(Stdio::null());
+
+    match timeout(Duration::from_secs(timeout_secs), cmd.status()).await {
+        Ok(Ok(s)) if s.success() => {
+            println!("  {:<50} [ {}OK{} ]", description, GREEN, RESET);
+            true
+        }
+        Ok(Ok(s)) => {
+            println!("  {:<50} [ {}FAILED (Code: {}){} ]", description, RED, s.code().unwrap_or(-1), RESET);
+            false
+        }
+        Ok(Err(e)) => {
+            println!("  {:<50} [ {}ERROR: {}{} ]", description, RED, e, RESET);
+            false
+        }
+        Err(_) => {
+            println!("  {:<50} [ {}TIMEOUT ({}s){} ]", description, RED, timeout_secs, RESET);
+            false
+        }
+    }
+}
+
+async fn backup_file(path: &str) {
+    let original = Path::new(path);
+    if original.exists() {
+        let backup_path = format!("{}.bak", path);
+        match fs::copy(original, &backup_path).await {
+            Ok(_) => println!("  {:<50} [ {}BACKUP OK{} ]", format!("Securing {}", path), CYAN, RESET),
+            Err(e) => println!("  {:<50} [ {}BACKUP FAIL: {}{} ]", format!("Securing {}", path), RED, e, RESET),
+        }
+    }
+}
+
+async fn check_required_tools() -> bool {
+    println!("{}Verifying Required System Tools...{}", BOLD, RESET);
+    let tools = vec!["dnf", "modprobe", "systemctl", "firewall-cmd", "git", "chown", "chmod", "grep"];
+    let mut all_passed = true;
+
+    for tool in tools {
+        let mut cmd = Command::new("which");
+        cmd.arg(tool).stdout(Stdio::null()).stderr(Stdio::null());
+
+        match timeout(Duration::from_secs(5), cmd.status()).await {
+            Ok(Ok(s)) if s.success() => {
+                println!("  {:<50} [ {}FOUND{} ]", tool, GREEN, RESET);
+            }
+            _ => {
+                println!("  {:<50} [ {}MISSING{} ]", tool, RED, RESET);
+                all_passed = false;
+            }
+        }
+    }
+    all_passed
+}
+
+// =====================================================================
+// CORE FUNCTIONS
+// =====================================================================
+
+async fn execute_step(description: &str, program: &str, args: &[&str], timeout_secs: u64) -> bool {
     println!("{} {}...", BOLD, description);
     let _ = io::stdout().flush().await;
 
-    let status = Command::new(program)
-        .args(args)
-        .stdout(Stdio::inherit()) 
-        .stderr(Stdio::inherit())
-        .status()
-        .await;
+    let mut cmd = Command::new(program);
+    cmd.args(args).stdout(Stdio::inherit()).stderr(Stdio::inherit());
 
-    match status {
-        Ok(s) if s.success() => { 
-            println!("{}[ OK ]{} {}", GREEN, RESET, description); 
+    match timeout(Duration::from_secs(timeout_secs), cmd.status()).await {
+        Ok(Ok(s)) if s.success() => { 
+            println!("{}[ OK ]{} {}\n", GREEN, RESET, description); 
             true 
         }
-        _ => { 
-            println!("{}[ FAILED ]{} {}", RED, RESET, description); 
+        Ok(Ok(s)) => { 
+            println!("{}[ FAILED (Exit: {}) ]{} {}\n", RED, s.code().unwrap_or(-1), RESET, description); 
             false 
+        }
+        Ok(Err(e)) => {
+            println!("{}[ SYSTEM ERROR: {} ]{} {}\n", RED, e, RESET, description);
+            false
+        }
+        Err(_) => {
+            println!("{}[ TIMEOUT EXCEEDED ({}s) ]{} {}\n", RED, timeout_secs, RESET, description);
+            false
         }
     }
 }
@@ -96,24 +179,33 @@ async fn verify_data_environment() {
     println!("Verifying Local Data Environment...");
 
     if data_path.exists() {
-        if let Ok(abs_path) = fs::canonicalize(data_path).await {
-            println!("  {:<50} [ {}FOUND{} ]", "Data directory already exists", CYAN, RESET);
-            println!("  {}Location: {}{}", BOLD, abs_path.display(), RESET);
-            
-            println!("  {}Contents:{}", BOLD, RESET);
-            if let Ok(mut entries) = fs::read_dir(data_path).await {
-                let mut has_files = false;
-                while let Ok(Some(entry)) = entries.next_entry().await {
-                    println!("    - {}", entry.file_name().to_string_lossy());
-                    has_files = true;
+        match fs::canonicalize(data_path).await {
+            Ok(abs_path) => {
+                println!("  {:<50} [ {}FOUND{} ]", "Data directory already exists", CYAN, RESET);
+                println!("  {}Location: {}{}", BOLD, abs_path.display(), RESET);
+                
+                println!("  {}Contents:{}", BOLD, RESET);
+                match fs::read_dir(data_path).await {
+                    Ok(mut entries) => {
+                        let mut has_files = false;
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            println!("    - {}", entry.file_name().to_string_lossy());
+                            has_files = true;
+                        }
+                        if !has_files { println!("    (Directory is empty)"); }
+                    }
+                    Err(e) => println!("    {}Failed to read directory contents: {}{}", RED, e, RESET),
                 }
-                if !has_files { println!("    (Directory is empty)"); }
             }
+            Err(e) => println!("  {:<50} [ {}ERROR{} ] Failed to resolve path: {}", "Data directory verification", RED, RESET, e),
         }
     } else {
         match fs::create_dir_all(data_path).await {
             Ok(_) => println!("  {:<50} [ {}CREATED{} ]", "New data directory created", GREEN, RESET),
-            Err(_) => println!("  {:<50} [ {}FAILED{} ]", "Failed to create data directory", RED, RESET),
+            Err(e) => {
+                println!("  {:<50} [ {}CRITICAL FAIL{} ]", "Failed to create data directory", RED, RESET);
+                eprintln!("    Reason: {}", e);
+            }
         }
     }
 }
@@ -122,143 +214,175 @@ async fn deploy_melisa_binary() {
     let target_path = "/usr/local/bin/melisa";
     println!("\n{}REFRESHING BINARY: Overwriting /usr/local/bin/melisa...{}", BOLD, RESET);
 
-    let current_exe = std::env::current_exe().expect("Gagal mendapatkan path biner");
+    let current_exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            println!("  {:<50} [ {}FATAL{} ]", "Retrieving current binary path", RED, RESET);
+            eprintln!("    Error: {}", e);
+            return;
+        }
+    };
 
     if fs::metadata(target_path).await.is_ok() {
-        let _ = fs::remove_file(target_path).await;
-        println!("  {:<50} [ {}CLEANED{} ]", "Old binary unlinked", CYAN, RESET);
+        if let Err(e) = fs::remove_file(target_path).await {
+            println!("  {:<50} [ {}WARNING{} ] Failed to remove old binary: {}", "Binary cleanup", RED, RESET, e);
+        } else {
+            println!("  {:<50} [ {}CLEANED{} ]", "Old binary unlinked", CYAN, RESET);
+        }
     }
 
-    let status = Command::new("cp")
-        .args(&[current_exe.to_str().unwrap(), target_path])
-        .status()
-        .await;
+    let mut cmd = Command::new("cp");
+    cmd.args(&[current_exe.to_str().unwrap(), target_path]);
 
-    if let Ok(s) = status {
-        if s.success() {
-            // Set root ownership dan aktifkan SUID bit (4755)
-            let _ = Command::new("chown").args(&["root:root", target_path]).status().await;
-            let _ = Command::new("chmod").args(&["4755", target_path]).status().await;
-            println!("  {:<50} [ {}UPDATED{} ]", "New version deployed (SUID set)", GREEN, RESET);
+    match timeout(Duration::from_secs(10), cmd.status()).await {
+        Ok(Ok(s)) if s.success() => {
+            let chown_ok = execute_silent_task("chown", &["root:root", target_path], "Setting root ownership", 5).await;
+            let chmod_ok = execute_silent_task("chmod", &["4755", target_path], "Setting SUID bit (4755)", 5).await;
+
+            if chown_ok && chmod_ok {
+                println!("  {:<50} [ {}UPDATED{} ]", "New version deployed (SUID set)", GREEN, RESET);
+            } else {
+                println!("  {:<50} [ {}SECURITY WARNING{} ]", "Binary copied but ownership/SUID assignment failed", RED, RESET);
+            }
         }
+        Ok(Ok(s)) => println!("  {:<50} [ {}FAILED (Code: {}){} ]", "Failed to copy new binary", RED, s.code().unwrap_or(-1), RESET),
+        Ok(Err(e)) => println!("  {:<50} [ {}IO ERROR: {}{} ]", "Failed to copy new binary", RED, e, RESET),
+        Err(_) => println!("  {:<50} [ {}TIMEOUT{} ]", "Copy operation timed out", RED, RESET),
     }
 }
 
 async fn setup_ssh_firewall() {
     println!("\nConfiguring Firewall for SSH Access...");
-    let _ = Command::new("firewall-cmd").args(&["--add-service=ssh", "--permanent"]).stdout(Stdio::null()).status().await;
-    let _ = Command::new("firewall-cmd").args(&["--reload"]).stdout(Stdio::null()).status().await;
-    println!("  {:<50} [ {}OK{} ]", "Firewall SSH port 22 opened", GREEN, RESET);
+    let add_status = execute_silent_task("firewall-cmd", &["--add-service=ssh", "--permanent"], "Add SSH service to firewall", 10).await;
+    let reload_status = execute_silent_task("firewall-cmd", &["--reload"], "Reload firewall rules", 15).await;
+    
+    if add_status && reload_status {
+        println!("  {:<50} [ {}OK{} ]", "Firewall SSH port 22 secured and opened", GREEN, RESET);
+    } else {
+        println!("  {:<50} [ {}FAILED{} ]", "Failed to configure Firewall properly", RED, RESET);
+    }
 }
 
 async fn setup_lxc_network_quota() {
     let config_path = "/etc/lxc/lxc-usernet";
+    println!("\nConfiguring LXC Network Quota...");
+    
     if let Ok(user) = std::env::var("SUDO_USER") {
-        let quota_rule = format!("{} veth lxcbr0 10\n", user);
+        if user.is_empty() { return; }
         
+        let quota_rule = format!("{} veth lxcbr0 10\n", user);
+        backup_file(config_path).await;
+
         let content = fs::read_to_string(config_path).await.unwrap_or_default();
         if !content.contains(&quota_rule) {
-            if let Ok(mut file) = OpenOptions::new().append(true).create(true).open(config_path).await {
-                let _ = file.write_all(quota_rule.as_bytes()).await;
-                println!("  {:<50} [ {}OK{} ]", format!("Network quota for {} assigned", user), GREEN, RESET);
+            match OpenOptions::new().append(true).create(true).open(config_path).await {
+                Ok(mut file) => {
+                    if let Err(e) = file.write_all(quota_rule.as_bytes()).await {
+                        println!("  {:<50} [ {}IO ERROR{} ] Failed writing to lxc-usernet: {}", "Network Quota", RED, RESET, e);
+                    } else {
+                        println!("  {:<50} [ {}OK{} ]", format!("Network quota for '{}' assigned", user), GREEN, RESET);
+                    }
+                }
+                Err(e) => println!("  {:<50} [ {}ACCESS DENIED{} ] Cannot open lxc-usernet: {}", "Network Quota", RED, RESET, e),
             }
+        } else {
+            println!("  {:<50} [ {}SKIPPED{} ]", "Network quota already configured", CYAN, RESET);
         }
     }
 }
 
 async fn register_melisa_shell() {
     let shell_path = "/usr/local/bin/melisa";
-    let cmd = format!("grep -qxF '{}' /etc/shells || echo '{}' >> /etc/shells", shell_path, shell_path);
-    let _ = Command::new("sh").args(&["-c", &cmd]).status().await;
-    println!("  {:<50} [ {}OK{} ]", "Shell registered in /etc/shells", GREEN, RESET);
+    println!("\nRegistering Jail Shell...");
+
+    backup_file("/etc/shells").await;
+
+    let cmd = format!("grep -qxF '{0}' /etc/shells || echo '{0}' >> /etc/shells", shell_path);
+    if execute_silent_task("sh", &["-c", &cmd], "Registering shell in /etc/shells", 10).await {
+        println!("  {:<50} [ {}OK{} ]", "Shell environment registered successfully", GREEN, RESET);
+    }
 }
 
 async fn configure_sudoers_access() {
     let sudo_rule = "ALL ALL=(ALL) NOPASSWD: /usr/local/bin/melisa\n";
     let sudoers_file = "/etc/sudoers.d/melisa";
+    println!("\nConfiguring Sudoers Access...");
 
-    if let Ok(mut file) = OpenOptions::new().create(true).write(true).truncate(true).open(sudoers_file).await {
-        if file.write_all(sudo_rule.as_bytes()).await.is_ok() {
-            let _ = Command::new("chmod").args(&["0440", sudoers_file]).status().await;
-            println!("  {:<50} [ {}OK{} ]", "Sudoers rule deployed", GREEN, RESET);
+    match OpenOptions::new().create(true).write(true).truncate(true).open(sudoers_file).await {
+        Ok(mut file) => {
+            if let Err(e) = file.write_all(sudo_rule.as_bytes()).await {
+                println!("  {:<50} [ {}IO ERROR{} ] Failed writing sudoers file: {}", "Sudoers Policy", RED, RESET, e);
+            } else if execute_silent_task("chmod", &["0440", sudoers_file], "Applying strict permissions (0440)", 5).await {
+                println!("  {:<50} [ {}OK{} ]", "Sudoers rules successfully deployed", GREEN, RESET);
+            }
         }
+        Err(e) => println!("  {:<50} [ {}ACCESS DENIED{} ] Failed creating sudoers file: {}", "Sudoers Policy", RED, RESET, e),
     }
 }
 
 async fn fix_uidmap_permissions() {
+    println!("\nFixing System Traversal Permissions...");
     let paths = ["/usr/bin/newuidmap", "/usr/bin/newgidmap"];
+    
     for path in &paths {
         if Path::new(path).exists() {
-            let _ = Command::new("chmod").args(&["u+s", path]).status().await;
+            execute_silent_task("chmod", &["u+s", path], &format!("Setting SUID on {}", path), 5).await;
+        } else {
+            println!("  {:<50} [ {}MISSING BINARY{} ]", path, RED, RESET);
         }
     }
-    let _ = Command::new("chmod").args(&["+x", "/var/lib/lxc"]).status().await;
-    println!("  {:<50} [ {}OK{} ]", "System traversal permissions fixed", GREEN, RESET);
+    
+    if execute_silent_task("chmod", &["+x", "/var/lib/lxc"], "Allowing traversal on /var/lib/lxc", 5).await {
+        println!("  {:<50} [ {}OK{} ]", "System traversal permissions resolved", GREEN, RESET);
+    }
 }
 
 async fn fix_shared_folder_permission(host_path: &str) {
-    // Gunakan UID/GID 100000 untuk mapping unprivileged LXC
-    let _ = Command::new("chown").args(&["-R", "100000:100000", host_path]).status().await;
+    println!("\nApplying Shared Folder Permissions...");
+    // Mapping to UID/GID 100000 for unprivileged LXC environments
+    if execute_silent_task("chown", &["-R", "100000:100000", host_path], &format!("Mapping '{}' to 100000:100000", host_path), 60).await {
+         println!("  {:<50} [ {}OK{} ]", "Shared folder ownership mapped", GREEN, RESET);
+    }
 }
 
 async fn setup_projects_directory() {
     println!("\n{}Configuring Master Projects Infrastructure...{}", BOLD, RESET);
 
-    let mkdir_status = Command::new("mkdir")
-        .args(&["-p", PROJECTS_MASTER])
-        .status()
-        .await;
-
-    match mkdir_status {
-        Ok(s) if s.success() => {
-            // Gunakan 1777 (Sticky Bit). 
-            // Semua user bisa buat folder, tapi tidak bisa hapus folder orang lain.
-            let chmod_status = Command::new("chmod")
-                .args(&["1777", PROJECTS_MASTER])
-                .status()
-                .await;
-
-            if let Ok(cs) = chmod_status {
-                if cs.success() {
-                    println!("  {:<50} [ {}OK{} ]", "Master projects directory open & secured", GREEN, RESET);
-                } else {
-                    println!("  {:<50} [ {}FAILED{} ]", "Failed to set permissions", RED, RESET);
-                }
+    match timeout(Duration::from_secs(10), Command::new("mkdir").args(&["-p", PROJECTS_MASTER]).status()).await {
+        Ok(Ok(s)) if s.success() => {
+            // Apply Sticky Bit (1777) - Users can create directories but cannot delete others' directories
+            if execute_silent_task("chmod", &["1777", PROJECTS_MASTER], "Setting Sticky Bit (1777) on Master Projects", 5).await {
+                println!("  {:<50} [ {}OK{} ]", "Master projects directory secured and opened", GREEN, RESET);
             }
         }
-        _ => println!("  {:<50} [ {}FAILED{} ]", "Could not create projects directory", RED, RESET),
+        Ok(Ok(s)) => println!("  {:<50} [ {}FAILED (Code: {}){} ]", "Directory creation blocked", RED, s.code().unwrap_or(-1), RESET),
+        Ok(Err(e)) => println!("  {:<50} [ {}IO ERROR: {}{} ]", "Directory creation failed", RED, e, RESET),
+        Err(_) => println!("  {:<50} [ {}TIMEOUT{} ]", "Directory creation timed out", RED, RESET),
     }
 }
 
 async fn configure_git_security() {
     println!("\nConfiguring Global Git Security...");
     
-    // --system agar konfigurasi ini tidak hilang saat user berganti
-    let status = Command::new("git")
-        .args(&["config", "--system", "--add", "safe.directory", "*"])
-        .status()
-        .await;
-
-    match status {
-        Ok(s) if s.success() => {
-            println!("  {:<50} [ {}OK{} ]", "Global Git safe.directory set to '*'", GREEN, RESET);
-        }
-        _ => {
-            println!("  {:<50} [ {}FAILED{} ]", "Failed to configure Git safe directory", RED, RESET);
-        }
+    // --system parameter ensures configuration persists across user boundaries
+    if execute_silent_task("git", &["config", "--system", "--add", "safe.directory", "*"], "Setting global git safe.directory='*'", 10).await {
+        println!("  {:<50} [ {}OK{} ]", "Global Git safety overrides applied", GREEN, RESET);
     }
 }
 
 async fn fix_system_privacy() {
-    println!("\nHardening System Privacy...");
-    // 711 pada /home mencegah user biasa melakukan 'ls /home' untuk melihat daftar user lain
-    let _ = Command::new("chmod").args(&["711", "/home"]).status().await;
-    println!("  {:<50} [ {}OK{} ]", "Directory /home is now unlistable", GREEN, RESET);
+    println!("\nHardening System Privacy Boundaries...");
+    // 711 on /home prevents standard users from performing 'ls /home' to enumerate other users
+    if execute_silent_task("chmod", &["711", "/home"], "Protecting /home directory indexing", 10).await {
+        println!("  {:<50} [ {}OK{} ]", "Directory /home is now fully unlistable", GREEN, RESET);
+    }
 }
 
 async fn setup_user_mapping(username: &str) {
-    // Memberikan rentang UID/GID untuk subordinasi LXC
-    let _ = Command::new("usermod")
-        .args(&["--add-subuids", "100000-165535", "--add-subgids", "100000-165535", username])
-        .status().await;
+    println!("\nSetting up LXC Subordinate IDs for User...");
+    let desc = format!("Mapping SubUID/SubGID for {}", username);
+    
+    if execute_silent_task("usermod", &["--add-subuids", "100000-165535", "--add-subgids", "100000-165535", username], &desc, 15).await {
+        println!("  {:<50} [ {}OK{} ]", "LXC User namespace mapping successfully configured", GREEN, RESET);
+    }
 }
