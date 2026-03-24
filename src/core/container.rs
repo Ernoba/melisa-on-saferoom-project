@@ -1,16 +1,15 @@
 use tokio::process::Command;
 use std::process::Stdio;
-use std::fs::OpenOptions;
-use std::io::Write;
+// Upgraded to tokio::fs for non-blocking asynchronous file operations
+use tokio::fs::{self, OpenOptions}; 
+use tokio::io::AsyncWriteExt; 
 use std::path::Path;
-
-// Fungsi ini sekarang menerima DistroMetadata
-use tokio::time::{sleep, Duration}; // Menggunakan tokio sleep agar tidak blocking
+use tokio::time::{sleep, Duration}; 
 
 use crate::core::root_check::ensure_admin;
 use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW}; 
 
-pub const LXC_PATH: &str = "/var/lib/lxc"; // Tambah pub
+pub const LXC_PATH: &str = "/var/lib/lxc"; 
 
 #[derive(Debug, Clone)]
 pub struct DistroMetadata {
@@ -19,63 +18,129 @@ pub struct DistroMetadata {
     pub release: String,    
     pub arch: String,       
     #[allow(dead_code)]
-    pub variant: String,    // Pastikan ini ada
+    pub variant: String,    
     pub pkg_manager: String 
 }
 
+/// Creates a new LXC container using the download template.
+/// Handles GPG errors, existing containers, and auto-initializes the network.
 pub async fn create_new_container(name: &str, meta: DistroMetadata) {
-    if !ensure_admin().await { return; }
-    ensure_host_network_ready().await;
+    // [STEP 0] PRE-FLIGHT: Verify host runtime environment (lxcbr0, etc.)
+    if !verify_host_runtime().await {
+        eprintln!("{}[ERROR]{} Host network bridge is down and auto-repair failed.{}", RED, BOLD, RESET);
+        eprintln!("{}Tip:{} Run 'melisa --setup' to initialize host infrastructure.", YELLOW, RESET);
+        return; 
+    }
 
     println!("{}--- Creating Container: {} ({}) ---{}", BOLD, name, meta.slug, RESET);
     
+    // Execute the lxc-create command to pull and build the rootfs
     let process = Command::new("sudo")
         .args(&[
-            "lxc-create", "-P", LXC_PATH, "-t", "download", "-n", name, 
+            "-n", "lxc-create", "-P", LXC_PATH, "-t", "download", "-n", name, 
             "--", "-d", &meta.name, "-r", &meta.release, "-a", &meta.arch
         ])
         .output()
-        .await; // Tambahkan await
+        .await; 
 
     match process {
         Ok(output) => {
             if output.status.success() {
-                println!("{}[SUCCESS]{} Container created.", GREEN, RESET);
+                println!("{}[SUCCESS]{} Container successfully created.", GREEN, RESET);
                 
-                // Injeksi konfigurasi dasar
-                inject_network_config(name);
-                setup_container_dns(name); 
+                // Inject basic network configurations to ensure internet access
+                inject_network_config(name).await;
+                
+                // Inject and lock DNS to prevent systemd-resolved/netconfig from overwriting it
+                setup_container_dns(name).await; 
 
-                // Jalankan kontainer untuk setup lanjutan
+                // Start the container for further internal setups
                 println!("{}[INFO]{} Starting container for initial setup...", YELLOW, RESET);
-                start_container(name).await; // Tambahkan await
+                start_container(name).await; 
 
-                // Menunggu koneksi internet siap di dalam kontainer
-                println!("{}[INFO]{} Menunggu antarmuka jaringan dan DHCP siap (5 detik)...", YELLOW, RESET);
-                sleep(Duration::from_secs(5)).await; // Menggunakan tokio sleep + await
-
-                // Eksekusi update berdasarkan pkg_manager distro tersebut
-                auto_initial_setup(name, &meta.pkg_manager).await; // Tambahkan await
+                // DYNAMIC WAIT: Actively poll for network readiness instead of blindly sleeping
+                if wait_for_network_initialization(name).await {
+                    // Execute the package manager update inside the container securely
+                    auto_initial_setup(name, &meta.pkg_manager).await; 
+                } else {
+                    eprintln!("{}[ERROR]{} Network DHCP initialization timed out. Skipping package manager setup.", RED, RESET);
+                }
+                
+                println!("{}[SUCCESS]{} Container successfully provisioned!", GREEN, RESET);
                 
             } else {
                 let error_msg = String::from_utf8_lossy(&output.stderr);
                 
+                // Parse specific LXC errors to provide user-friendly feedback
                 if error_msg.contains("already exists") {
-                    println!("{}[WARNING]{} Container '{}' sudah ada. Melewati proses pembuatan.", YELLOW, RESET, name);
+                    println!("{}[WARNING]{} Container '{}' already exists. Skipping creation process.", YELLOW, RESET, name);
                 } else if error_msg.contains("GPG") {
-                    eprintln!("{}[ERROR]{} Masalah tanda tangan GPG. Coba jalankan 'gpg --recv-keys' di host.", RED, RESET);
+                    eprintln!("{}[ERROR]{} GPG signature verification failed. Try running 'gpg --recv-keys' on the host system.", RED, RESET);
                 } else if error_msg.contains("download") {
-                    eprintln!("{}[ERROR]{} Gagal mendownload template. Pastikan koneksi internet host aktif.", RED, RESET);
+                    eprintln!("{}[ERROR]{} Failed to download template. Please verify the host's internet connection.", RED, RESET);
                 } else {
-                    eprintln!("{}[ERROR]{} Gagal membuat container: {}", RED, RESET, name);
-                    eprintln!("Detail Error: {}", error_msg);
+                    eprintln!("{}[ERROR]{} Failed to create container: {}", RED, RESET, name);
+                    eprintln!("Error Details: {}", error_msg);
                 }
             }
         },
-        Err(e) => eprintln!("{}[FATAL]{} Could not run lxc-create: {}", RED, RESET, e),
+        Err(e) => eprintln!("{}[FATAL]{} Could not execute lxc-create command: {}", RED, RESET, e),
     }
 }
 
+/// Performs a lightweight pre-flight check on the host system's networking.
+/// If the required bridge is missing, it attempts an automatic repair.
+async fn verify_host_runtime() -> bool {
+    // Checking /sys/class/net is extremely fast as it avoids spawning a sub-process.
+    if Path::new("/sys/class/net/lxcbr0").exists() {
+        return true; // Bridge is active; proceed with container operations.
+    }
+
+    // If the bridge is missing, notify the user and trigger the repair sequence.
+    println!("{}[WARNING]{} Network bridge 'lxcbr0' not found. Initiating host auto-repair...", YELLOW, RESET);
+    
+    // Call the repair function to start services and set firewall rules
+    ensure_host_network_ready().await; 
+
+    // Final check to see if the repair was successful
+    Path::new("/sys/class/net/lxcbr0").exists()
+}
+
+/// Dynamically polls LXC to check if the container has successfully acquired an IP address.
+/// This prevents race conditions where the package manager runs before DNS is ready.
+async fn wait_for_network_initialization(name: &str) -> bool {
+    println!("{}[INFO]{} Waiting for DHCP lease and network interfaces to initialize...", YELLOW, RESET);
+    
+    let max_retries = 30; // Maximum wait time of 30 seconds
+    
+    for _ in 0..max_retries {
+        // Query LXC for the container's IP addresses using non-interactive sudo
+        let output = Command::new("sudo")
+            .args(&["-n", "lxc-info", "-n", name, "-iH"])
+            .output()
+            .await;
+
+        if let Ok(out) = output {
+            let ips = String::from_utf8_lossy(&out.stdout);
+            
+            // Check if standard IPv4 formatting exists in the output
+            if ips.contains(".") && !ips.trim().is_empty() {
+                println!("{}[INFO]{} Network connection established. Allowing DNS resolver to settle...", YELLOW, RESET);
+                // Buffer time: Give systemd-resolved / netconfig a brief moment to initialize
+                sleep(Duration::from_secs(3)).await; 
+                return true;
+            }
+        }
+        
+        // Wait 1 second before querying again
+        sleep(Duration::from_secs(1)).await;
+    }
+    
+    false
+}
+
+/// Automatically updates the package repository of the newly created container
+/// based on its specific package manager (apt, dnf, apk, etc.)
 async fn auto_initial_setup(name: &str, pkg_manager: &str) {
     let cmd = match pkg_manager {
         "apt"    => "apt-get update -y", 
@@ -83,100 +148,147 @@ async fn auto_initial_setup(name: &str, pkg_manager: &str) {
         "apk"    => "apk update",
         "pacman" => "pacman -Sy --noconfirm",
         "zypper" => "zypper --non-interactive refresh",
-        _        => "true",
+        _        => "true", // Fallback to do nothing securely
     };
     
     println!("{}[INFO]{} Updating package repository for '{}'...", YELLOW, RESET, name);
 
-    let status = Command::new("sudo")
-        .args(&["lxc-attach", "-n", name, "--", "sh", "-c", cmd])
-        .status()
-        .await; // Tambahkan await
+    let output = Command::new("sudo")
+        .args(&["-n", "lxc-attach", "-n", name, "--", "sh", "-c", cmd])
+        .output()
+        .await; 
 
-    match status {
-        Ok(s) if s.success() => println!("{}[SUCCESS]{} Initial setup completed for {}.", GREEN, RESET, name),
-        _ => eprintln!("{}[ERROR]{} Failed to run initial setup on {}.", RED, RESET, name),
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                println!("{}[SUCCESS]{} Initial repository setup completed for {}.", GREEN, RESET, name);
+            } else {
+                eprintln!("{}[ERROR]{} Failed to execute initial repository setup on {}.", RED, RESET, name);
+                eprintln!("[DEBUG] Package Manager Error: {}", String::from_utf8_lossy(&out.stderr));
+            }
+        },
+        Err(e) => eprintln!("{}[FATAL]{} Failed to spawn lxc-attach process: {}", RED, RESET, e),
     }
 }
 
-//fungsi memastikan internet container bekerja 
-fn inject_network_config(name: &str) {
-    let config_path = format!("{}/{}/config", LXC_PATH, name);
+/// Injects a veth bridge network configuration into the container's config file.
+/// Ensures the container is connected to lxcbr0 with a random MAC address.
+async fn inject_network_config(name: &str) {
+    let config_path = format!("{}/{}/config", LXC_PATH, name); 
     
     if Path::new(&config_path).exists() {
-        // Baca dulu isinya
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        // Read existing configuration using non-blocking async I/O
+        let content = fs::read_to_string(&config_path).await.unwrap_or_default();
         
-        // Jika sudah ada lxc.net.0.link, jangan disuntik lagi!
+        // Prevent duplicate network configuration injections
         if content.contains("lxc.net.0.link") {
-            println!("{}[SKIP]{} Network configuration already exists.", YELLOW, RESET);
+            println!("{}[SKIP]{} Network configuration already exists. Skipping injection.", YELLOW, RESET);
             return;
         }
 
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(&config_path)
-            .expect("Gagal membuka config container");
+        // Use tokio::fs::OpenOptions for fully asynchronous file operations
+        match OpenOptions::new().append(true).open(&config_path).await {
+            Ok(mut file) => {
+                let net_config = format!(
+                    "\n# Auto-generated by MELISA\n\
+                    lxc.net.0.type = veth\n\
+                    lxc.net.0.link = lxcbr0\n\
+                    lxc.net.0.flags = up\n\
+                    lxc.net.0.hwaddr = ee:ec:fa:5e:{:02x}:{:02x}\n", 
+                    rand::random::<u8>(), rand::random::<u8>() 
+                );
 
-        let net_config = format!(
-            "\n# Auto-generated by MELISA\n\
-            lxc.net.0.type = veth\n\
-            lxc.net.0.link = lxcbr0\n\
-            lxc.net.0.flags = up\n\
-            lxc.net.0.hwaddr = ee:ec:fa:5e:{:02x}:{:02x}\n", 
-            rand::random::<u8>(), rand::random::<u8>()
-        );
-
-        file.write_all(net_config.as_bytes()).ok();
+                if let Err(e) = file.write_all(net_config.as_bytes()).await {
+                    eprintln!("{}[ERROR]{} Failed to write async network config: {}", RED, RESET, e);
+                }
+            }
+            Err(e) => eprintln!("{}[ERROR]{} Failed to open container configuration file asynchronously: {}", RED, RESET, e),
+        }
     }
 }
 
-fn setup_container_dns(name: &str) {
+/// Injects a static DNS configuration (Google DNS) into the container's rootfs
+/// and applies an immutable lock to prevent overwrites by network managers.
+async fn setup_container_dns(name: &str) {
     let etc_path = format!("{}/{}/rootfs/etc", LXC_PATH, name);
     let dns_path = format!("{}/resolv.conf", etc_path);
     
-    // 1. Pastikan folder /etc di dalam rootfs benar-benar ada
-    if let Err(e) = std::fs::create_dir_all(&etc_path) {
-        eprintln!("{}[ERROR]{} Gagal memastikan folder /etc: {}", RED, RESET, e);
-        return;
-    }
+    // 1. Ensure the target configuration directory exists
+    let _ = Command::new("sudo")
+        .args(&["mkdir", "-p", &etc_path])
+        .status()
+        .await;
 
-    // 2. Jika resolv.conf adalah symlink (sering di Ubuntu/Debian), hapus agar bisa ditulis file asli
-    if std::fs::symlink_metadata(&dns_path).is_ok() {
-        let _ = std::fs::remove_file(&dns_path);
-    }
+    // 2. Remove existing resolv.conf or symlinks to avoid conflicts
+    let _ = Command::new("sudo")
+        .args(&["rm", "-f", &dns_path])
+        .status()
+        .await;
     
-    let dns_content = "nameserver 8.8.8.8\nnameserver 8.8.4.4\n";
-    
-    match std::fs::write(&dns_path, dns_content) {
-        Ok(_) => println!("{}[INFO]{} DNS configured (Google DNS).", GREEN, RESET),
-        Err(e) => eprintln!("{}[ERROR]{} Gagal set DNS: {}", RED, RESET, e),
+    // 3. Write static DNS entries using shell redirection
+    let dns_content = "nameserver 8.8.8.8\\nnameserver 8.8.4.4\\n";
+    let write_status = Command::new("sudo")
+        .args(&["bash", "-c", &format!("echo -e '{}' > {}", dns_content, dns_path)])
+        .status()
+        .await;
+
+    match write_status {
+        Ok(s) if s.success() => {
+            // 4. Set the immutable attribute to prevent DHCP/NetworkManager from altering the file
+            let lock_status = Command::new("sudo")
+                .args(&["chattr", "+i", &dns_path])
+                .status()
+                .await;
+                
+            if let Ok(ls) = lock_status {
+                if ls.success() {
+                    println!("{}[INFO]{} DNS configured and locked successfully.", GREEN, RESET);
+                } else {
+                    println!("{}[WARNING]{} DNS written, but failed to apply immutable lock (chattr).", YELLOW, RESET);
+                }
+            }
+        },
+        _ => eprintln!("{}[ERROR]{} Failed to configure DNS.", RED, RESET),
     }
 }
 
+/// Helper function to unlock the DNS file later if needed
+#[allow(dead_code)]
+async fn unlock_container_dns(name: &str) {
+    let dns_path = format!("{}/{}/rootfs/etc/resolv.conf", LXC_PATH, name);
+    let _ = Command::new("sudo")
+        .args(&["-n", "chattr", "-i", &dns_path])
+        .status()
+        .await;
+}
+
+/// Ensures the host system's LXC bridge network and firewall are active
 pub async fn ensure_host_network_ready() {
-    // Pastikan lxc-net aktif
-    let _ = Command::new("systemctl")
-        .args(&["start", "lxc-net"])
-        .status()
-        .await; // Tambahkan await
+    println!("{}[INFO]{} Re-initializing Host Network Infrastructure...", BOLD, RESET);
 
-    // Pastikan firewalld mengizinkan lxcbr0
-    let _ = Command::new("firewall-cmd")
-        .args(&["--zone=trusted", "--add-interface=lxcbr0", "--permanent"])
+    // Start lxc-net service silently using non-interactive sudo
+    let _ = Command::new("sudo")
+        .args(&["-n", "systemctl", "start", "lxc-net"])
         .status()
-        .await; // Tambahkan await
+        .await; 
+
+    // Ensure firewalld trusts the lxc bridge interface
+    let _ = Command::new("sudo")
+        .args(&["-n", "firewall-cmd", "--zone=trusted", "--add-interface=lxcbr0", "--permanent"])
+        .status()
+        .await; 
     
-    let _ = Command::new("firewall-cmd")
-        .args(&["--reload"])
+    // Reload firewall to apply changes immediately
+    let _ = Command::new("sudo")
+        .args(&["-n", "firewall-cmd", "--reload"])
         .status()
-        .await; // Tambahkan await
+        .await; 
 }
 
-// Helper function untuk cek apakah container sedang jalan
+/// Helper function to check if a specific container is currently running
 async fn is_container_running(name: &str) -> bool {
-    let output = Command::new("lxc-info")
-        .args(&["-P", LXC_PATH, "-n", name, "-s"])
+    let output = Command::new("sudo")
+        .args(&["-n", "lxc-info", "-P", LXC_PATH, "-n", name, "-s"])
         .output()
         .await;
 
@@ -189,45 +301,68 @@ async fn is_container_running(name: &str) -> bool {
     }
 }
 
+/// Gracefully stops and destroys a container.
+/// It automatically handles running containers and unlocks restricted files before deletion.
 pub async fn delete_container(name: &str) {
-    if !ensure_admin().await { return; } 
     println!("{}--- Processing Deletion: {} ---{}", BOLD, name, RESET);
 
-    // 1. Cek status (Gunakan .status() agar tidak gantung kalau sudo minta pass)
+    // 1. PRE-CHECK: If the container is running, we MUST stop it first
     if is_container_running(name).await {
-        println!("{}[INFO]{} Container '{}' is running. Stopping...", YELLOW, RESET, name);
+        println!("{}[INFO]{} Container '{}' is currently running.", YELLOW, RESET, name);
+        println!("{}[INFO]{} Initiating graceful shutdown before deletion...", YELLOW, RESET);
+        
+        // Call the actual stop function
         stop_container(name).await;
+
+        // Verify if it actually stopped. If it fails to stop, we cannot proceed.
+        if is_container_running(name).await {
+            eprintln!("{}[ERROR]{} Failed to stop container '{}'. Deletion aborted to prevent data corruption.", RED, RESET, name);
+            return;
+        }
     }
 
-    // 2. Hapus (Gunakan .status() untuk interaksi terminal yang lebih baik)
+    // 2. PREPARATION: Unlock DNS configuration
+    // LXC cannot delete the rootfs if 'resolv.conf' is still locked with 'chattr +i'
+    println!("{}[INFO]{} Unlocking system configurations for {}...", BOLD, RESET, name);
+    unlock_container_dns(name).await;
+
+    // 3. EXECUTION: Destroy the container
+    // We use '-f' (force) as a secondary safety measure
     let status = Command::new("sudo")
-        .args(&["lxc-destroy", "-P", LXC_PATH, "-n", name])
-        .status() // <--- GANTI .output() JADI .status()
+        .args(&["-n", "lxc-destroy", "-P", LXC_PATH, "-n", name, "-f"])
+        .status() 
         .await;
 
     match status {
         Ok(s) if s.success() => {
-            println!("{}[SUCCESS]{} Container '{}' dihapus.", GREEN, RESET, name);
+            println!("{}[SUCCESS]{} Container '{}' has been permanently destroyed.", GREEN, RESET, name);
         },
-        _ => eprintln!("{}[ERROR]{} Gagal menghapus. Pastikan nama benar.", RED, RESET),
+        Ok(s) => {
+            eprintln!("{}[ERROR]{} Deletion failed with exit code: {}.", RED, RESET, s.code().unwrap_or(-1));
+            eprintln!("{}[TIP]{} Ensure you have sudo permissions or check 'lxc-ls' for container status.", YELLOW, RESET);
+        },
+        Err(e) => eprintln!("{}[FATAL]{} Could not execute lxc-destroy: {}", RED, RESET, e),
     }
 }
+
+/// Boots up a container in daemon (-d) mode
 pub async fn start_container(name: &str) {
     println!("{}[INFO]{} Starting container '{}'...", GREEN, RESET, name);
     
     let status = Command::new("sudo")
         .args(&["lxc-start", "-P", LXC_PATH, "-n", name, "-d"]) 
         .status()
-        .await; // Tambahkan await
+        .await; 
 
     match status {
         Ok(s) if s.success() => println!("{}[SUCCESS]{} Container is now running.", GREEN, RESET),
-        _ => eprintln!("{}[ERROR]{} Failed to start container. Check if it exists.", RED, RESET),
+        _ => eprintln!("{}[ERROR]{} Failed to start container. Check if it exists and is configured properly.", RED, RESET),
     }
 }
 
+/// Attaches the host terminal directly into the container's bash session
 pub async fn attach_to_container(name: &str) {
-    println!("{}[MODE]{} Entering Saferoom: {}. Type 'exit' to return.", BOLD, name, RESET);
+    println!("{}[MODE]{} Entering Saferoom: {}. Type 'exit' to return to Host.", BOLD, name, RESET);
 
     let _ = Command::new("sudo")
         .args(&["lxc-attach", "-P", LXC_PATH, "-n", name, "--", "bash"])
@@ -235,56 +370,58 @@ pub async fn attach_to_container(name: &str) {
         .stderr(Stdio::inherit())
         .stdin(Stdio::inherit())
         .status()
-        .await; // Tambahkan await
+        .await; 
 }
 
+/// Gracefully powers down a running container
 pub async fn stop_container(name: &str) {
-    if !ensure_admin().await { return; } // Gerbang Keamanan
-    println!("{}[SHUTDOWN]{} Stopping container '{}'...", YELLOW, RESET, name);
+    if !ensure_admin().await { return; } 
+    println!("{}[SHUTDOWN]{} Initiating shutdown for container '{}'...", YELLOW, RESET, name);
 
     let process = Command::new("sudo")
         .args(&["lxc-stop", "-P", LXC_PATH, "-n", name])
         .output()
-        .await; // Tambahkan await
+        .await; 
 
     match process {
         Ok(output) => {
             if output.status.success() {
-                println!("{}[SUCCESS]{} Container '{}' stopped.", GREEN, RESET, name);
+                println!("{}[SUCCESS]{} Container '{}' has been successfully stopped.", GREEN, RESET, name);
             } else {
                 eprintln!("{}[ERROR]{} Failed to stop container.", RED, RESET);
             }
         },
-        Err(e) => eprintln!("{}[FATAL]{} Error: {}", RED, RESET, e),
+        Err(e) => eprintln!("{}[FATAL]{} Execution Error: {}", RED, RESET, e),
     }
 }
 
+/// Sends a direct execution command to a running container from the host
 pub async fn send_command(name: &str, command_args: &[&str]) {
     if command_args.is_empty() {
-        eprintln!("{}[ERROR]{} No command provided.", RED, RESET);
+        eprintln!("{}[ERROR]{} No command payload provided.", RED, RESET);
         return;
     }
 
-    // 1. CEK STATUS DULU (Pre-flight Check)
+    // 1. PRE-FLIGHT CHECK: Ensure the target container is running
     let check_status = Command::new("sudo")
         .args(&["/usr/bin/lxc-info", "-P", LXC_PATH, "-n", name, "-s"])
         .output()
-        .await; // Tambahkan await
+        .await; 
 
     if let Ok(out) = check_status {
         let output_str = String::from_utf8_lossy(&out.stdout);
         if !output_str.contains("RUNNING") {
             println!("{}[ERROR]{} Container '{}' is NOT running.", RED, RESET, name);
-            println!("{}Tip:{} Run 'melisa --run {}' first.", YELLOW, RESET, name);
-            return; // Berhenti di sini, jangan lanjut eksekusi
+            println!("{}Tip:{} Execute 'melisa --run {}' to start it first.", YELLOW, RESET, name);
+            return; // Abort execution safely
         }
     } else {
-        eprintln!("{}[ERROR]{} Gagal mengecek status kontainer.", RED, RESET);
+        eprintln!("{}[ERROR]{} Failed to retrieve container status.", RED, RESET);
         return;
     }
 
-    // 2. JIKA RUNNING, BARU EKSEKUSI
-    println!("{}[SEND]{} Executing on '{}'...", BOLD, name, RESET);
+    // 2. EXECUTION: Pass the command to lxc-attach
+    println!("{}[SEND]{} Executing payload on '{}'...", BOLD, name, RESET);
 
     let status = Command::new("sudo")
         .arg("lxc-attach")
@@ -298,80 +435,97 @@ pub async fn send_command(name: &str, command_args: &[&str]) {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .await; // Tambahkan await
+        .await; 
 
-    // 3. CEK APAKAH PERINTAHNYA BERHASIL
+    // 3. VERIFICATION
     match status {
-        Ok(s) if s.success() => println!("\n{}[DONE]{} Command executed successfully.", GREEN, RESET),
-        _ => eprintln!("\n{}[ERROR]{} Command inside container returned an error.", RED, RESET),
+        Ok(s) if s.success() => println!("\n{}[DONE]{} Command executed successfully within container.", GREEN, RESET),
+        _ => eprintln!("\n{}[ERROR]{} Command inside container returned a non-zero exit code.", RED, RESET),
     }
 }
 
-//fungsi untuk membagi folder host dengan me mount ke kontainer 
-// Di src/core/container.rs
-
+/// Mounts a directory from the Host system to the Container via bind mount
 pub async fn add_shared_folder(name: &str, host_path: &str, container_path: &str) {
     let config_path = format!("{}/{}/config", LXC_PATH, name);
     
-    // 1. Ubah path menjadi absolut secara otomatis
-    let abs_host_path = std::fs::canonicalize(host_path)
-        .expect("Path folder host tidak valid atau tidak ditemukan");
+    // 1. Safely resolve absolute path, preventing crashes if the path is invalid
+    let abs_host_path = match fs::canonicalize(host_path).await {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("{}[ERROR]{} Invalid or missing host directory path: {}", RED, RESET, e);
+            return;
+        }
+    };
 
     if Path::new(&config_path).exists() {
-        // 2. Cek apakah folder tersebut sudah pernah di-share sebelumnya (hindari duplikasi)
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+        // 2. Check for duplication before appending
+        let content = fs::read_to_string(&config_path).await.unwrap_or_default();
         let mount_entry = format!("lxc.mount.entry = {} {}", abs_host_path.display(), container_path);
         
         if content.contains(&mount_entry) {
-            println!("{}[SKIP]{} Folder ini sudah terdaftar di konfigurasi.", YELLOW, RESET);
+            println!("{}[SKIP]{} This directory is already mapped in the configuration.", YELLOW, RESET);
             return;
         }
 
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(&config_path)
-            .expect("Gagal membuka config container");
+        // 3. Append to the config file gracefully
+        match OpenOptions::new().append(true).open(&config_path).await {
+            Ok(mut file) => {
+                let mount_config = format!(
+                    "\n# Shared Folder mapped by MELISA\n\
+                    lxc.mount.entry = {} {} none bind,create=dir 0 0\n", 
+                    abs_host_path.display(), container_path
+                );
 
-        let mount_config = format!(
-            "\n# Shared Folder by MELISA\n\
-            lxc.mount.entry = {} {} none bind,create=dir 0 0\n", 
-            abs_host_path.display(), container_path
-        );
-
-        match file.write_all(mount_config.as_bytes()) {
-            Ok(_) => {
-                println!("{}[SUCCESS]{} Shared folder integrated to {}.", GREEN, RESET, name);
-                println!("{}[IMPORTANT]{} Please run 'melisa --stop {}' and 'melisa --run {}' to apply.", YELLOW, RESET, name, name);
-            },
-            Err(e) => eprintln!("{}[ERROR]{} Gagal menulis konfigurasi: {}", RED, RESET, e),
+                match file.write_all(mount_config.as_bytes()).await {
+                    Ok(_) => {
+                        println!("{}[SUCCESS]{} Shared folder integrated to {}.", GREEN, RESET, name);
+                        println!("{}[IMPORTANT]{} Please run 'melisa --stop {}' and 'melisa --run {}' to apply changes.", YELLOW, RESET, name, name);
+                    },
+                    Err(e) => eprintln!("{}[ERROR]{} Failed to write mount configuration: {}", RED, RESET, e),
+                }
+            }
+            Err(e) => eprintln!("{}[ERROR]{} Failed to open container configuration: {}", RED, RESET, e),
         }
+    } else {
+        eprintln!("{}[ERROR]{} Configuration file for container '{}' not found.", RED, RESET, name);
     }
 }
 
+/// Removes a previously mounted shared folder from the container's configuration
 pub async fn remove_shared_folder(name: &str, host_path: &str, container_path: &str) {
     let config_path = format!("{}/{}/config", LXC_PATH, name);
     
-    // 1. Standarisasi path host agar match dengan yang ada di config
-    let abs_host_path = std::fs::canonicalize(host_path)
-        .expect("Path folder host tidak valid atau tidak ditemukan");
+    // 1. Standardize path to match the exact string in the config file
+    let abs_host_path = match fs::canonicalize(host_path).await {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("{}[ERROR]{} Host path not found or invalid: {}", RED, RESET, e);
+            return;
+        }
+    };
     let host_path_str = abs_host_path.to_string_lossy();
 
     if Path::new(&config_path).exists() {
-        let content = std::fs::read_to_string(&config_path)
-            .expect("Gagal membaca konfigurasi container");
+        let content = match fs::read_to_string(&config_path).await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{}[ERROR]{} Failed to read container configuration: {}", RED, RESET, e);
+                return;
+            }
+        };
 
         let target_entry = format!("lxc.mount.entry = {} {}", host_path_str, container_path);
-        let comment_tag = "# Shared Folder by MELISA";
+        let comment_tag = "# Shared Folder mapped by MELISA";
 
+        // 2. Filter out the specific mount entry and its associated comment
         let lines: Vec<&str> = content.lines().collect();
         let mut new_lines = Vec::new();
         let mut removed = false;
 
         let mut i = 0;
         while i < lines.len() {
-            // Cek apakah baris ini mengandung mount entry yang dicari
             if lines[i].contains(&target_entry) {
-                // Opsional: Hapus komentar MELISA jika ada tepat di atas baris entry
+                // Remove the MELISA comment tag if it directly precedes the mount entry
                 if !new_lines.is_empty() && new_lines.last() == Some(&comment_tag) {
                     new_lines.pop();
                 }
@@ -384,44 +538,45 @@ pub async fn remove_shared_folder(name: &str, host_path: &str, container_path: &
         }
 
         if !removed {
-            println!("{}[SKIP]{} Shared folder tidak ditemukan dalam konfigurasi.", YELLOW, RESET);
+            println!("{}[SKIP]{} Shared folder mapping was not found in the configuration.", YELLOW, RESET);
             return;
         }
 
-        // 2. Tulis ulang file tanpa baris yang dihapus
+        // 3. Rewrite the configuration file with the target lines removed
         let new_content = new_lines.join("\n");
-        match std::fs::write(&config_path, new_content) {
+        match fs::write(&config_path, new_content).await {
             Ok(_) => {
-                println!("{}[SUCCESS]{} Shared folder removed from {}.", GREEN, RESET, name);
+                println!("{}[SUCCESS]{} Shared folder successfully unmapped from {}.", GREEN, RESET, name);
                 println!("{}[IMPORTANT]{} Please restart the container to apply changes.", YELLOW, RESET);
             },
-            Err(e) => eprintln!("{}[ERROR]{} Gagal memperbarui konfigurasi: {}", RED, RESET, e),
+            Err(e) => eprintln!("{}[ERROR]{} Failed to update configuration file: {}", RED, RESET, e),
         }
     } else {
-        eprintln!("{}[ERROR]{} Container config tidak ditemukan.", RED, RESET);
+        eprintln!("{}[ERROR]{} Container configuration file not found.", RED, RESET);
     }
 }
 
-//penanganan upload file ke container dengan tarball via stdin
+/// Securely pipes a tarball from standard input directly into the container's filesystem
 pub async fn upload_to_container(name: &str, dest_path: &str) {
     let extract_cmd = format!("mkdir -p {} && tar -xzf - -C {}", dest_path, dest_path);
     
     let status = Command::new("sudo")
         .args(&["lxc-attach", "-P", LXC_PATH, "-n", name, "--", "bash", "-c", &extract_cmd])
-        .stdin(Stdio::inherit())  // Menerima file tarbal dari koneksi klien
+        .stdin(Stdio::inherit())  // Accepts the incoming tarball stream from the host
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .await; // Tambahkan await
+        .await; 
 
     match status {
-        Ok(s) if s.success() => println!("Upload ke '{}' selesai.", dest_path),
-        _ => eprintln!("Gagal mengekstrak data di dalam container."),
+        Ok(s) if s.success() => println!("{}[SUCCESS]{} Upload and extraction to '{}' completed successfully.", GREEN, RESET, dest_path),
+        _ => eprintln!("{}[ERROR]{} Failed to extract data stream inside the container.", RED, RESET),
     }
 }
 
+/// Displays a list of existing containers using lxc-ls
 pub async fn list_containers(only_active: bool) {
-    println!("{}[INFO]{} Listing containers...", GREEN, RESET);
+    println!("{}[INFO]{} Retrieving container inventory...", GREEN, RESET);
     
     let mut cmd = Command::new("sudo");
     cmd.args(&["lxc-ls", "-P", LXC_PATH, "--fancy"]);
@@ -437,9 +592,9 @@ pub async fn list_containers(only_active: bool) {
             if out.status.success() {
                 println!("{}", String::from_utf8_lossy(&out.stdout));
             } else {
-                eprintln!("{}[ERROR]{} Gagal mengambil daftar.", RED, RESET);
+                eprintln!("{}[ERROR]{} Failed to retrieve container list.", RED, RESET);
             }
         }
-        Err(e) => eprintln!("{}[FATAL]{} Error: {}", RED, RESET, e),
+        Err(e) => eprintln!("{}[FATAL]{} System Error: {}", RED, RESET, e),
     }
 }

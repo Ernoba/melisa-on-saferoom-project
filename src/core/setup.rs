@@ -251,15 +251,40 @@ async fn deploy_melisa_binary() {
     }
 }
 
+/// Configures the host's firewall to allow SSH access and trust the LXC bridge.
+/// This ensures both remote management and container connectivity are fully functional.
 async fn setup_ssh_firewall() {
-    println!("\nConfiguring Firewall for SSH Access...");
-    let add_status = execute_silent_task("firewall-cmd", &["--add-service=ssh", "--permanent"], "Add SSH service to firewall", 10).await;
-    let reload_status = execute_silent_task("firewall-cmd", &["--reload"], "Reload firewall rules", 15).await;
+    println!("\nConfiguring Host Firewall for SSH and Network Bridge Access...");
+
+    // 1. Enable SSH service access permanently
+    let ssh_status = execute_silent_task(
+        "firewall-cmd", 
+        &["--add-service=ssh", "--permanent"], 
+        "Adding SSH service to firewall rules", 
+        10
+    ).await;
+
+    // 2. Trust the LXC bridge interface (lxcbr0) permanently
+    // This is critical: without this, the host's firewall might block DHCP or internet traffic for containers.
+    let bridge_status = execute_silent_task(
+        "firewall-cmd", 
+        &["--zone=trusted", "--add-interface=lxcbr0", "--permanent"], 
+        "Assigning lxcbr0 to trusted firewall zone", 
+        10
+    ).await;
+
+    // 3. Reload the firewall to apply all permanent changes immediately
+    let reload_status = execute_silent_task(
+        "firewall-cmd", 
+        &["--reload"], 
+        "Reloading firewall configuration", 
+        15
+    ).await;
     
-    if add_status && reload_status {
-        println!("  {:<50} [ {}OK{} ]", "Firewall SSH port 22 secured and opened", GREEN, RESET);
+    if ssh_status && bridge_status && reload_status {
+        println!("  {:<50} [ {}OK{} ]", "Firewall ready: SSH and LXC Bridge are now authorized", GREEN, RESET);
     } else {
-        println!("  {:<50} [ {}FAILED{} ]", "Failed to configure Firewall properly", RED, RESET);
+        eprintln!("  {:<50} [ {}FAILED{} ]", "Critical error during firewall deployment", RED, RESET);
     }
 }
 

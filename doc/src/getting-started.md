@@ -33,7 +33,7 @@ Make sure you have **Rust** installed (use [rustup](https://rustup.rs/) if you d
     Run MELISA program:
     
     ```bash
-    sudo -E ./target/debug/saferoom
+    sudo -E ./target/debug/melisa
     ```
 
     **Verify MELISA running:**

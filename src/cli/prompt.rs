@@ -3,72 +3,94 @@ use rustyline::Editor;
 use rustyline::history::FileHistory;
 use tokio::fs;
 use std::io::ErrorKind;
+
 use crate::cli::helper::MelisaHelper;
 use crate::cli::color_text::{GREEN, RED, YELLOW, BLUE, BOLD, RESET};
 
+/// Dynamically constructs the interactive terminal prompt string.
+/// Adapts to the execution context (Standard User vs. Sudo/Root).
 pub struct Prompt {
     pub user: String,
     pub home: String,
 }
 
 impl Prompt {
+    /// Initializes a new Prompt instance by resolving the executing user's environment.
     pub fn new() -> Self {
-        // Ambil nama user dari environment SSH/System
+        // Resolve the actual user identity, prioritizing SUDO_USER to prevent 
+        // the prompt from falsely claiming "root" when an admin escalates privileges.
         let user = env::var("SUDO_USER")
             .or_else(|_| env::var("USER"))
             .or_else(|_| env::var("LOGNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
         
-        // Internal Melisa tetap mengacu ke /root
+        // Resolve the home directory to enable path abbreviation (e.g., replacing /home/user with ~)
         let home = env::var("HOME").unwrap_or_else(|_| "/root".to_string());
 
         Self { user, home }
     }
 
+    /// Compiles and formats the final prompt string injected into the Rustyline editor.
     pub fn build(&self) -> String {
+        // Retrieve the current working directory and abbreviate the home path to '~'
         let curr_path = env::current_dir()
             .unwrap_or_default()
             .to_string_lossy()
             .replace(&self.home, "~");
         
-        // Output: melisa@afira:~> atau melisa@saferoom:~>
+        // Output Format: melisa@username:~/current/path> 
         format!("{BOLD}{GREEN}melisa@{}{RESET}:{BLUE}{}{RESET}> ", self.user, curr_path)
     }
 }
 
+/// Safely purges the command history both from the active memory buffer and physical storage.
 pub async fn reset_history(rl: &mut Editor<MelisaHelper, FileHistory>, history_path: &str) {
-    // 1. Bersihkan history di RAM dulu (Operasi atomik di level aplikasi)
+    // 1. Purge the in-memory history buffer first (Atomic application-level operation)
     let _ = rl.clear_history();
 
-    // 2. Coba hapus file tanpa nge-check metadata dulu (Menghindari TOCTOU race condition)
-    // Langsung tembak hapus, kalau error baru kita tangani.
+    // 2. Attempt physical deletion without prior metadata checks.
+    // This strictly prevents TOCTOU (Time-Of-Check to Time-Of-Use) race conditions.
     match fs::remove_file(history_path).await {
         Ok(_) => {
-            println!("{GREEN}[SUCCESS]{RESET} History file has been physically deleted.");
+            println!("{}[SUCCESS]{} Local history file has been permanently deleted.", GREEN, RESET);
         }
         Err(e) => {
             match e.kind() {
-                // Jika file emang sudah tidak ada (mungkin dihapus user lain duluan), itu OK.
+                // Ignore if the file is already gone (e.g., deleted manually by the user)
                 ErrorKind::NotFound => {
-                    println!("{YELLOW}[INFO]{RESET} History file already gone or doesn't exist.");
+                    println!("{}[INFO]{} History file does not exist or was already removed.", YELLOW, RESET);
                 }
-                // Jika ada masalah izin akses (Permission Denied)
+                // Handle restricted access contexts gracefully
                 ErrorKind::PermissionDenied => {
-                    eprintln!("{RED}[ERROR]{RESET} Cannot delete history: Permission denied.");
+                    eprintln!("{}[ERROR]{} Cannot delete history: Permission denied. Escalation required.", RED, RESET);
                 }
-                // Masalah tak terduga lainnya (misal file corrupt atau locked oleh process lain)
+                // Catch-all for unexpected I/O anomalies (e.g., locked file, corrupted filesystem)
                 _ => {
-                    eprintln!("{RED}[ERROR]{RESET} Unexpected error while resetting history: {}", e);
+                    eprintln!("{}[ERROR]{} Unexpected I/O error during history reset: {}", RED, RESET, e);
                 }
             }
         }
     }
 
-    // 3. Pastikan state Editor sinkron dengan disk (buat file kosong baru jika perlu)
-    // Ini penting agar instance MELISA ini tidak error saat mencoba save_history nanti.
+    // 3. Re-initialize a clean, empty history file to synchronize the Editor state.
+    // This prevents Rustyline from crashing upon exit when it attempts to save a new session.
     if let Err(e) = rl.save_history(history_path) {
-        eprintln!("{YELLOW}[WARN]{RESET} Failed to re-initialize empty history file: {}", e);
+        eprintln!("{}[WARNING]{} Failed to re-initialize an empty history file: {}", YELLOW, RESET, e);
+    } else {
+        // --- ENTERPRISE SECURITY PATCH ---
+        // Command history files can contain sensitive parameters.
+        // We must enforce strict 0600 permissions (Owner Read/Write ONLY) on the newly created file.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Note: We use std::fs here because modifying permissions immediately after 
+            // a synchronous rustyline save_history call guarantees file existence.
+            if let Ok(mut perms) = std::fs::metadata(history_path).map(|m| m.permissions()) {
+                perms.set_mode(0o600);
+                let _ = std::fs::set_permissions(history_path, perms);
+            }
+        }
     }
 
-    println!("{GREEN}[DONE]{RESET} Reset process finished.");
+    println!("{}[DONE]{} Command history purge sequence completed successfully.", GREEN, RESET);
 }

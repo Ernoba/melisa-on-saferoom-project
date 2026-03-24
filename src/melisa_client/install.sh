@@ -1,32 +1,89 @@
-#!/bin/bash
-
-# ==========================================
+#!/usr/bin/env bash
+# ==============================================================================
 # MELISA MODULAR CLIENT INSTALLER
-# ==========================================
+# Description: Deploys the MELISA client, configures system directories,
+#              and registers the executable to the user's PATH.
+# ==============================================================================
+
+# Enforce strict execution (stop script if any unhandled command fails)
+set -e
+
+# --- Visual Rendering ---
 BOLD="\e[1m"
 RESET="\e[0m"
 GREEN="\e[32m"
 CYAN="\e[36m"
+RED="\e[31m"
+YELLOW="\e[33m"
 
-echo -e "${BOLD}${CYAN}Memasang Melisa Client...${RESET}"
+echo -e "${BOLD}${CYAN}Initializing MELISA Client Deployment...${RESET}\n"
 
-# Buat direktori sistem lokal
+# 1. Path Resolution: Ensure we are copying from the correct source directory
+# This allows the installer to be safely executed from any location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC_DIR="$SCRIPT_DIR/src"
+
+if [ ! -d "$SRC_DIR" ]; then
+    echo -e "${RED}[FATAL] Source directory 'src/' not found at $SCRIPT_DIR.${RESET}"
+    echo -e "Please ensure you are executing this installer from the repository root."
+    exit 1
+fi
+
+# 2. Provision Local System Directories
+echo -e "  [+] Provisioning local system directories..."
 mkdir -p ~/.local/bin
 mkdir -p ~/.local/share/melisa
 mkdir -p ~/.config/melisa
 
-# Salin source file
-cp src/melisa ~/.local/bin/melisa
-cp src/*.sh ~/.local/share/melisa/
+# 3. Deploy Source Files
+echo -e "  [+] Deploying core binaries and modules..."
 
-# Berikan izin eksekusi
-chmod +x ~/.local/bin/melisa
 
-# Daftarkan ke PATH (jika belum)
-if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    export PATH="$HOME/.local/bin:$PATH"
+# Validate that the main executable exists before attempting to copy
+if [ ! -f "$SRC_DIR/melisa" ]; then
+    echo -e "${RED}[FATAL] Core executable 'src/melisa' is missing.${RESET}"
+    exit 1
 fi
 
-echo -e "${BOLD}${GREEN}[SUCCESS] Melisa berhasil dipasang!${RESET}"
-echo -e "Silakan ketik ${BOLD}melisa${RESET} di terminal Anda."
+cp "$SRC_DIR/melisa" ~/.local/bin/melisa
+# Copy all shell modules, redirecting stderr to null if none exist to avoid ugly errors
+cp "$SRC_DIR/"*.sh ~/.local/share/melisa/ 2>/dev/null || echo -e "  ${YELLOW}[WARN] No supplementary .sh modules found to copy.${RESET}"
+
+# 4. Enforce Execution Permissions
+echo -e "  [+] Setting strict execution permissions..."
+chmod +x ~/.local/bin/melisa
+
+# 5. Dynamic PATH Registration (Multi-Shell Support)
+echo -e "  [+] Verifying PATH environment variables..."
+
+# Detect the user's active shell configuration file
+SHELL_RC=""
+if [[ "$SHELL" == *"zsh"* ]]; then
+    SHELL_RC="$HOME/.zshrc"
+elif [[ "$SHELL" == *"bash"* ]]; then
+    SHELL_RC="$HOME/.bashrc"
+else
+    SHELL_RC="$HOME/.profile"
+fi
+
+# Check if ~/.local/bin is already present in the system PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo -e "  ${YELLOW}[INFO] Registering ~/.local/bin to your PATH in $(basename "$SHELL_RC")...${RESET}"
+    echo -e '\n# MELISA Client Environment' >> "$SHELL_RC"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+    
+    export PATH="$HOME/.local/bin:$PATH"
+    RELOAD_NEEDED=true
+else
+    echo -e "  [v] System PATH is already configured correctly."
+fi
+
+echo -e "\n${BOLD}${GREEN}[SUCCESS] MELISA Client has been successfully deployed!${RESET}"
+
+# Provide clear instructions if the user needs to refresh their terminal
+if [ "$RELOAD_NEEDED" = true ]; then
+    echo -e "\n${YELLOW}IMPORTANT: You must reload your shell to apply the new PATH.${RESET}"
+    echo -e "Please execute: ${BOLD}source $SHELL_RC${RESET}"
+fi
+
+echo -e "Execute ${BOLD}melisa --help${RESET} to initialize your first connection."
