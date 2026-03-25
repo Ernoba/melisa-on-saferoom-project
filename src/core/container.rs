@@ -5,9 +5,15 @@ use tokio::fs::{self, OpenOptions};
 use tokio::io::AsyncWriteExt; 
 use std::path::Path;
 use tokio::time::{sleep, Duration}; 
+use std::path::PathBuf;
 
 use crate::core::root_check::ensure_admin;
 use crate::cli::color_text::{BOLD, GREEN, RED, RESET, YELLOW}; 
+
+use crate::core::metadata::inject_distro_metadata;
+use tracing::error; // Tambahkan 'error' di sini
+
+use indicatif::ProgressBar;
 
 pub const LXC_PATH: &str = "/var/lib/lxc"; 
 
@@ -24,7 +30,7 @@ pub struct DistroMetadata {
 
 /// Creates a new LXC container using the download template.
 /// Handles GPG errors, existing containers, and auto-initializes the network.
-pub async fn create_new_container(name: &str, meta: DistroMetadata) {
+pub async fn create_new_container(name: &str, meta: DistroMetadata, pb: ProgressBar)  {
     // [STEP 0] PRE-FLIGHT: Verify host runtime environment (lxcbr0, etc.)
     if !verify_host_runtime().await {
         eprintln!("{}[ERROR]{} Host network bridge is down and auto-repair failed.{}", RED, BOLD, RESET);
@@ -32,7 +38,7 @@ pub async fn create_new_container(name: &str, meta: DistroMetadata) {
         return; 
     }
 
-    println!("{}--- Creating Container: {} ({}) ---{}", BOLD, name, meta.slug, RESET);
+    pb.println(format!("{}--- Creating Container: {} ({}) ---{}", BOLD, name, meta.slug, RESET));
     
     // Execute the lxc-create command to pull and build the rootfs
     let process = Command::new("sudo")
@@ -46,7 +52,13 @@ pub async fn create_new_container(name: &str, meta: DistroMetadata) {
     match process {
         Ok(output) => {
             if output.status.success() {
-                println!("{}[SUCCESS]{} Container successfully created.", GREEN, RESET);
+                pb.println(format!("{}[SUCCESS]{} Container successfully created.", GREEN, RESET));
+
+                // Inject metadata distro in container system file
+                if let Err(e) = inject_distro_metadata(LXC_PATH, name, &meta).await {
+                    // Kita cetak peringatan tapi tidak menghentikan proses (non-fatal)
+                    error!("FATAL: Metadata injection failed: {}", e);
+                }
                 
                 // Inject basic network configurations to ensure internet access
                 inject_network_config(name).await;
@@ -55,7 +67,7 @@ pub async fn create_new_container(name: &str, meta: DistroMetadata) {
                 setup_container_dns(name).await; 
 
                 // Start the container for further internal setups
-                println!("{}[INFO]{} Starting container for initial setup...", YELLOW, RESET);
+                pb.println(format!("{}[INFO]{} Starting container for initial setup...", YELLOW, RESET));
                 start_container(name).await; 
 
                 // DYNAMIC WAIT: Actively poll for network readiness instead of blindly sleeping
@@ -63,24 +75,24 @@ pub async fn create_new_container(name: &str, meta: DistroMetadata) {
                     // Execute the package manager update inside the container securely
                     auto_initial_setup(name, &meta.pkg_manager).await; 
                 } else {
-                    eprintln!("{}[ERROR]{} Network DHCP initialization timed out. Skipping package manager setup.", RED, RESET);
+                    pb.println(format!("{}[ERROR]{} Network DHCP initialization timed out. Skipping package manager setup.", RED, RESET));
                 }
                 
-                println!("{}[SUCCESS]{} Container successfully provisioned!", GREEN, RESET);
+                pb.println(format!("{}[SUCCESS]{} Container successfully provisioned!", GREEN, RESET));
                 
             } else {
                 let error_msg = String::from_utf8_lossy(&output.stderr);
                 
                 // Parse specific LXC errors to provide user-friendly feedback
                 if error_msg.contains("already exists") {
-                    println!("{}[WARNING]{} Container '{}' already exists. Skipping creation process.", YELLOW, RESET, name);
+                    pb.println(format!("{}[WARNING]{} Container '{}' already exists. Skipping creation process.", YELLOW, RESET, name));
                 } else if error_msg.contains("GPG") {
-                    eprintln!("{}[ERROR]{} GPG signature verification failed. Try running 'gpg --recv-keys' on the host system.", RED, RESET);
+                    pb.println(format!("{}[ERROR]{} GPG signature verification failed. Try running 'gpg --recv-keys' on the host system.", RED, RESET));
                 } else if error_msg.contains("download") {
-                    eprintln!("{}[ERROR]{} Failed to download template. Please verify the host's internet connection.", RED, RESET);
+                    pb.println(format!("{}[ERROR]{} Failed to download template. Please verify the host's internet connection.", RED, RESET));
                 } else {
-                    eprintln!("{}[ERROR]{} Failed to create container: {}", RED, RESET, name);
-                    eprintln!("Error Details: {}", error_msg);
+                    pb.println(format!("{}[ERROR]{} Failed to create container: {}", RED, RESET, name));
+                    pb.println(format!("Error Details: {}", error_msg));
                 }
             }
         },
@@ -301,10 +313,27 @@ async fn is_container_running(name: &str) -> bool {
     }
 }
 
+/// Menghapus file metadata MELISA (info & tmp) secara eksplisit
+async fn cleanup_metadata(name: &str) {
+    let rootfs_path = PathBuf::from(LXC_PATH).join(name).join("rootfs");
+    let target_path = rootfs_path.join("etc").join("melisa-info");
+    let temp_path = rootfs_path.join("etc").join("melisa-info.tmp");
+
+    // Hapus file info utama
+    if tokio::fs::try_exists(&target_path).await.unwrap_or(false) {
+        let _ = tokio::fs::remove_file(&target_path).await;
+    }
+
+    // Hapus file temporary jika masih ada (bekas crash atau proses gagal)
+    if tokio::fs::try_exists(&temp_path).await.unwrap_or(false) {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+    }
+}
+
 /// Gracefully stops and destroys a container.
 /// It automatically handles running containers and unlocks restricted files before deletion.
-pub async fn delete_container(name: &str) {
-    println!("{}--- Processing Deletion: {} ---{}", BOLD, name, RESET);
+pub async fn delete_container(name: &str, pb: ProgressBar) {
+    pb.println(format!("{}--- Processing Deletion: {} ---{}", BOLD, name, RESET));
 
     // 1. PRE-CHECK: If the container is running, we MUST stop it first
     if is_container_running(name).await {
@@ -323,8 +352,14 @@ pub async fn delete_container(name: &str) {
 
     // 2. PREPARATION: Unlock DNS configuration
     // LXC cannot delete the rootfs if 'resolv.conf' is still locked with 'chattr +i'
-    println!("{}[INFO]{} Unlocking system configurations for {}...", BOLD, RESET, name);
+    pb.println(format!("{}[INFO]{} Unlocking system configurations for {}...", BOLD, RESET, name));
     unlock_container_dns(name).await;
+
+    // --- STEP TAMBAHAN: MELISA METADATA CLEANUP ---
+    // Kita bersihkan metadata MELISA sebelum folder rootfs dihancurkan total
+    println!("{}[INFO]{} Purging MELISA engine metadata for {}...", BOLD, RESET, name);
+    cleanup_metadata(name).await;
+    // ----------------------------------------------
 
     // 3. EXECUTION: Destroy the container
     // We use '-f' (force) as a secondary safety measure

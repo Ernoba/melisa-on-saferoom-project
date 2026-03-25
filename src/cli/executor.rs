@@ -17,7 +17,7 @@ use crate::core::project_management::{
     PROJECTS_MASTER, delete_project, invite, list_projects, 
     new_project, out_user, pull, update_project, update_all_users
 };
-use crate::core::metadata::print_version;
+use crate::core::metadata::{print_version, inspect_container_metadata, MelisaError};
 
 /// Defines the execution state after a command is processed
 pub enum ExecResult {
@@ -58,6 +58,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     println!("  --stop <name>          Gracefully terminate a running container session");
                     println!("  --use <name>           Execute an interactive TTY session (shell attach)");
                     println!("  --send <name> <cmd>    Dispatch a non-interactive command directly to a container");
+                    println!("  --info <name>          Retrieve and display container metadata");
                     println!("  --upload <name> <dest> Upload local artifacts to a container destination path");
 
                     if is_admin {
@@ -105,9 +106,10 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     let keyword = parts.get(2).unwrap_or(&"").to_lowercase();
                     
                     // Retrieve tuple (data, is_cache) with a visual loading spinner
+                    // Karena fungsi ini mungkin tidak log pesan internal, kita biarkan _pb
                     let (list, is_cache) = execute_with_spinner(
                         "Synchronizing distribution list...", 
-                        get_lxc_distro_list()
+                        |_pb| get_lxc_distro_list()
                     ).await;
 
                     // SAFETY CHECK: Handle the scenario where LXC data retrieval completely fails
@@ -148,7 +150,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     // Retrieve distribution metadata
                     let (list, is_cache) = execute_with_spinner(
                         "Validating distribution metadata...", 
-                        get_lxc_distro_list()
+                        |_pb| get_lxc_distro_list()
                     ).await;
 
                     // SAFETY CHECK: Prevent processing if the distribution list failed to load
@@ -164,12 +166,11 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     // Locate the exact distribution metadata matching the user's slug/code
                     if let Some(meta) = list.into_iter().find(|d| d.slug == *code) {
                         // Execute container creation asynchronously
+                        // AKTIFKAN pb di sini dan lemparkan ke create_new_container
                         execute_with_spinner(
                             &format!("Provisioning container '{}'...", name), 
-                            create_new_container(name, meta)
+                            |pb| create_new_container(name, meta, pb)
                         ).await;
-                        
-                        println!("{}[SUCCESS]{} Container successfully provisioned!", GREEN, RESET);
                     } else {
                         println!("{}[ERROR]{} Code '{}' was not found in the distribution registry.", RED, code, RESET);
                         println!("{}Tip:{} Execute 'melisa --search' to view available distribution codes.", YELLOW, RESET);
@@ -180,14 +181,13 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("{}[INFO]{} Validating deletion request for '{}'...", YELLOW, RESET, name);
 
                         // 1. Print interactive confirmation prompt
-                        print!("{}Are you sure you want to permanently delete '{}'? {} (y/N): {}", BOLD, name, RED, RESET);
+                        print!("{}Are you sure you want to permanently delete '{}'? (y/N): {}", RED, name, RESET);
                         
                         // 2. FORCE FLUSH: Ensure the prompt appears immediately before blocking for input
                         std::io::stdout().flush().expect("Failed to flush stdout");
 
                         let mut confirmation = String::new();
-                        let stdin = io::stdin();
-                        let mut reader = io::BufReader::new(stdin);
+                        let mut reader = io::BufReader::new(io::stdin());
                         
                         // 3. Await user input
                         if let Ok(_) = reader.read_line(&mut confirmation).await {
@@ -200,9 +200,10 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                             }
 
                             if input == "y" || input == "yes" {
+                                // AKTIFKAN pb di sini dan lemparkan ke delete_container
                                 execute_with_spinner(
                                     &format!("Destroying container '{}'...", name),
-                                    delete_container(name)
+                                    |pb| delete_container(name, pb)
                                 ).await;
                             } else {
                                 println!("{}[CANCEL]{} Deletion sequence aborted.", YELLOW, RESET);
@@ -255,6 +256,27 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("{}[ERROR]{} Container name required.{}", RED, BOLD, RESET);
                     }
                 },
+                "--info" => {
+                    if let Some(name) = parts.get(2) {
+                        println!("{}Searching metadata for container: {}...{}", BOLD, name, RESET);
+
+                        match inspect_container_metadata(name).await {
+                            Ok(data) => {
+                                println!("\n--- [ MELISA CONTAINER INFO ] ---");
+                                println!("{}", data.trim());
+                                println!("----------------------------------");
+                            },
+                            Err(MelisaError::MetadataNotFound(_)) => {
+                                println!("{}[ERROR]{} Container '{}' lacks MELISA metadata. It may not have been provisioned via the MELISA Engine.", RED, RESET, name);
+                            },
+                            Err(e) => {
+                                println!("{}[ERROR]{} An unexpected error occurred: {}", RED, RESET, e);
+                            }
+                        }
+                    } else {
+                        println!("{}[ERROR]{} Usage: melisa --info <name>{}", RED, BOLD, RESET);
+                    }
+                },
                 "--upload" => {
                     if let (Some(name), Some(dest)) = (parts.get(2), parts.get(3)) {
                         upload_to_container(name, dest).await;
@@ -291,13 +313,21 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 },
                 "--remove" => {
                     if let Some(name) = parts.get(2) {
-                        print!("{}Are you sure you want to delete user '{}'? (y/N): {}", YELLOW, name, RESET);
+                        print!("{}Are you sure you want to permanently delete user '{}'? (y/N): {}", RED, name, RESET);
                         std::io::stdout().flush().expect("Failed to flush stdout"); 
 
                         let mut conf = String::new();
                         let mut reader = io::BufReader::new(io::stdin());
-                        if reader.read_line(&mut conf).await.is_ok() {
-                            if conf.trim().to_lowercase() == "y" {
+                        
+                        if let Ok(_) = reader.read_line(&mut conf).await {
+                            let input = conf.trim().to_lowercase();
+                            
+                            if input.is_empty() {
+                                println!("{}[CANCEL]{} No input detected. User deletion aborted.", YELLOW, RESET);
+                                return ExecResult::Continue;
+                            }
+
+                            if input == "y" || input == "yes" {
                                 delete_melisa_user(name).await; 
                             } else {
                                 println!("{}[CANCEL]{} User deletion aborted.", YELLOW, RESET);

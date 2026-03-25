@@ -8,9 +8,10 @@ use std::future::Future;
 ///
 /// # Arguments
 /// * `message` - The informational text to display alongside the loading spinner.
-/// * `future`  - The asynchronous closure/task to execute.
-pub async fn execute_with_spinner<F, T>(message: &str, future: F) -> T 
+/// * `task_builder` - A closure that takes a clone of the ProgressBar and returns the asynchronous task to execute.
+pub async fn execute_with_spinner<C, F, T>(message: &str, task_builder: C) -> T 
 where 
+    C: FnOnce(ProgressBar) -> F,
     F: Future<Output = T> 
 {
     // 1. Initialize a new dynamic spinner instance
@@ -35,7 +36,9 @@ where
     // 4. Await the actual workload payload
     // Note: The spinner continues to tick gracefully on an isolated background thread 
     // managed by the indicatif library while Tokio handles the async future here.
-    let result = future.await;
+    // We inject a cloned instance of the ProgressBar into the closure so the caller 
+    // can safely print messages using `pb.println()` without breaking the animation.
+    let result = task_builder(pb.clone()).await;
 
     // 5. Cleanup Protocol: Wipe the spinner from the terminal line once the task completes.
     // This ensures the terminal standard output remains pristine for the next command sequence.
