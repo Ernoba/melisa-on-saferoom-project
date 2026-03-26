@@ -1,4 +1,14 @@
 [book]
-title = "GUIDE BOOK MELISA PROJECT"
-authors = ["saferoom"]
+title = "MELISA — Management Environment Linux Sandbox"
+authors = ["Erick Adriano Sebastian"]
 language = "en"
+src = "src"
+description = "Official documentation for MELISA: a high-performance, Rust-powered LXC container manager engineered for isolated, reproducible development environments."
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/ernoba/melisa-on-saferoom-project"
+edit-url-template = "https://github.com/ernoba/melisa-on-saferoom-project/edit/main/doc/{path}"
