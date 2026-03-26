@@ -2,15 +2,24 @@
 
 ## Platform Requirements
 
-The MELISA server is currently optimized for **Fedora Linux** (Workstation or Server edition) and any distribution that uses the `dnf` package manager. The automated `--setup` routine installs and configures the following system components via `dnf`:
+MELISA supports all major Linux distributions. The `--setup` routine automatically detects your host OS and selects the appropriate package manager, firewall tool, and service names:
 
-- `lxc`, `lxc-templates` — Linux Container runtime and base images
-- `libvirt` — Virtualization management library (bridge networking dependency)
+| Host Distribution | Package Manager | Firewall | SSH Service |
+|-------------------|-----------------|----------|-------------|
+| Fedora, RHEL, CentOS, Rocky Linux | `dnf` | `firewalld` | `sshd` |
+| Ubuntu | `apt-get` | `ufw` | `ssh` |
+| Debian | `apt-get` | `ufw` | `ssh` |
+| Arch Linux | `pacman` | `iptables` | `sshd` |
+| Other / Unknown | `apt-get` (fallback) | `ufw` (fallback) | `ssh` (fallback) |
+
+Detection is performed by parsing `/etc/os-release` at setup time. If your distribution is not explicitly listed, MELISA falls back to `apt-get` defaults with a warning and will still attempt to complete setup.
+
+The `--setup` routine installs and configures the following system components:
+
+- `lxc`, `lxc-templates` / `lxc-utils` — Linux Container runtime and base images
 - `bridge-utils` — Network bridge configuration tools
-- `openssh-server` — SSH daemon for remote client access
-- `firewalld` — Firewall management service
-
-> **Note:** Support for Ubuntu/Debian (`apt`) and Arch (`pacman`) distributions is planned for future releases. Attempting to run `--setup` on a non-`dnf` system will abort with a clear error message to prevent system inconsistency.
+- `openssh-server` / `openssh` — SSH daemon for remote client access
+- `firewalld` / `ufw` / `iptables` — Firewall management (selected automatically)
 
 ---
 
@@ -106,21 +115,21 @@ The installation routine performs the following steps, each with timeout protect
 
 | Step | Action | Details |
 |------|--------|---------|
-| 1 | **System Update** | `dnf update -y` — refreshes package repositories |
-| 2 | **Dependency Installation** | Installs `lxc`, `lxc-templates`, `libvirt`, `bridge-utils`, `openssh-server`, `firewalld` |
-| 3 | **Kernel Module Loading** | Loads `veth` kernel module for virtual network interface pairs |
-| 4 | **Service Activation** | Enables and starts `lxc.service`, `lxc-net.service`, `sshd`, `firewalld` |
-| 5 | **Binary Deployment** | Copies the MELISA binary to `/usr/local/bin/melisa` with **SUID bit (4755)** |
-| 6 | **Shell Registration** | Adds `/usr/local/bin/melisa` to `/etc/shells` as a valid login shell |
-| 7 | **Global Sudoers Rule** | Creates `/etc/sudoers.d/melisa` — allows all users to run `melisa` without a password |
-| 8 | **Projects Directory** | Creates `/opt/melisa/projects` with Sticky Bit (`chmod 1777`) |
-| 9 | **Firewall Configuration** | Opens SSH port; trusts `lxcbr0` bridge interface (supports `firewalld`, `ufw`, `iptables`) |
-| 10 | **LXC Network Quota** | Configures `/etc/lxc/lxc-usernet` — grants the executing user permission to manage virtual ethernet interfaces |
-| 11 | **User Namespace Mapping** | Sets `subuid`/`subgid` mappings (`100000–165535`) via `usermod` for unprivileged container support |
-| 12 | **SUID Fix** | Sets SUID on `/usr/bin/newuidmap` and `/usr/bin/newgidmap` for user namespace traversal |
-| 13 | **Privacy Hardening** | `chmod 711 /home` — prevents users from listing other users' home directories |
-| 14 | **Git Security** | Configures `git config --system safe.directory '*'` — prevents "dubious ownership" errors across user boundaries |
-| 15 | **Git Security Global Config** | Configures `git config --system safe.directory '*'` — prevents "dubious ownership" errors |
+| 1 | **Distro Detection** | Reads `/etc/os-release` and selects the correct package manager, firewall, and service names |
+| 2 | **System Update** | Updates package repositories (`dnf update` / `apt-get update` / `pacman -Sy`) |
+| 3 | **Dependency Installation** | Installs `lxc`, bridge tools, `openssh-server`, and firewall package |
+| 4 | **Kernel Module Loading** | Loads `veth` kernel module for virtual network interface pairs |
+| 5 | **Service Activation** | Enables and starts `lxc.service`, `lxc-net.service`, SSH daemon, and firewall |
+| 6 | **Binary Deployment** | Copies the MELISA binary to `/usr/local/bin/melisa` with **SUID bit (4755)** |
+| 7 | **Shell Registration** | Adds `/usr/local/bin/melisa` to `/etc/shells` as a valid login shell |
+| 8 | **Global Sudoers Rule** | Creates `/etc/sudoers.d/melisa` — allows all users to run `melisa` without a password |
+| 9 | **Projects Directory** | Creates `/opt/melisa/projects` with Sticky Bit (`chmod 1777`) |
+| 10 | **Firewall Configuration** | Opens SSH port; trusts `lxcbr0` bridge interface (supports `firewalld`, `ufw`, `iptables`) |
+| 11 | **LXC Network Quota** | Configures `/etc/lxc/lxc-usernet` — grants the executing user permission to manage virtual ethernet interfaces |
+| 12 | **User Namespace Mapping** | Sets `subuid`/`subgid` mappings (`100000–165535`) via `usermod` for unprivileged container support |
+| 13 | **SUID Fix** | Sets SUID on `/usr/bin/newuidmap` and `/usr/bin/newgidmap` for user namespace traversal |
+| 14 | **Privacy Hardening** | `chmod 711 /home` — prevents users from listing other users' home directories |
+| 15 | **Git Security** | Configures `git config --system safe.directory '*'` — prevents "dubious ownership" errors across user boundaries |
 
 ### Firewall Detection
 

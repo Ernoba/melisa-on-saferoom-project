@@ -28,12 +28,14 @@ Before you begin, verify you have the following:
 
 | Requirement | Server | Client |
 |-------------|--------|--------|
-| Linux OS (Fedora recommended) | ✅ Required | ❌ Not needed |
+| Linux OS (Fedora, Ubuntu, Debian, or Arch) | ✅ Required | ❌ Not needed |
 | Rust toolchain (`rustup`) | ✅ Required | ❌ Not needed |
 | Physical/console terminal access | ✅ Required for setup | ❌ Not needed |
 | Root / sudo privileges | ✅ Required | ⚠️ Needed once for installer |
 | SSH client | ❌ Not needed | ✅ Required |
 | Internet connection | ✅ Required | ✅ Required for first install |
+
+> **Supported host distributions:** Fedora, RHEL, CentOS, Rocky Linux (`dnf`), Ubuntu (`apt-get`), Debian (`apt-get`), Arch Linux (`pacman`). Other distributions will fall back to `apt-get` defaults with a warning.
 
 ## The Three Steps
 
