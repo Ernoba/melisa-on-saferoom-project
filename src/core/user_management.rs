@@ -126,7 +126,7 @@ async fn configure_sudoers(username: &str, role: UserRole) {
     let mut commands = vec![
         "/usr/bin/lxc-*", "/bin/lxc-*",
         "/usr/sbin/lxc-*", "/sbin/lxc-*", 
-        "/usr/share/lxc/templates/lxc-download",
+        "/usr/share/lxc/templates/lxc-download *",
         "/usr/bin/git *", "/bin/git *",
         "/usr/local/bin/melisa *",
         "/usr/bin/mkdir -p *", "/bin/mkdir -p *",

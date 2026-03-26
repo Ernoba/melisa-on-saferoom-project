@@ -73,16 +73,16 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
     }
 
     // 3. EXECUTE DATA RETRIEVAL
-    // Use the "-n" (non-interactive) flag on sudo to prevent hanging if a password is required!
-    // NOTE: Keeping absolute path here as it is a template script, not a system bin. 
-    // If it fails, the dynamic fallback below will catch it.
+    // [UPGRADE]: Added -H flag to force HOME=/root. This prevents GPG from crashing 
+    // when trying to read/write to the standard user's .gnupg directory.
     let output = Command::new("sudo")
-        .args(&["-n", "/usr/share/lxc/templates/lxc-download", "--list"])
+        .args(&["-n", "-H", "/usr/share/lxc/templates/lxc-download", "--list"])
         .output()
         .await;
 
     let result = match output {
-        Ok(out) if out.status.success() => {
+        // [CRITICAL FIX]: Check if stdout contains "Distribution" instead of strictly relying on exit code 0
+        Ok(out) if out.status.success() || (!out.stdout.is_empty() && String::from_utf8_lossy(&out.stdout).contains("Distribution")) => {
             let content = String::from_utf8_lossy(&out.stdout);
             if !content.is_empty() {
                 let _ = fs::write(GLOBAL_CACHE, content.to_string()).await;
@@ -95,37 +95,36 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
         Ok(out) => {
             eprintln!("\n[DEBUG] Main script failed. Error: {}", String::from_utf8_lossy(&out.stderr));
             
-            // PRE-EMPTIVE CLEANUP: Destroy any leftover probe container from a previous execution
-            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
+            // PRE-EMPTIVE CLEANUP
             let _ = Command::new("sudo")
                 .args(&["-n", "lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
                 .output()
                 .await;
 
             // FALLBACK PROTOCOL
-            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
+            // [UPGRADE]: Added -H flag for GPG safety
             let fallback = Command::new("sudo")
-                .args(&["-n", "lxc-create", "-n", "MELISA_PROBE_UNUSED", "-t", "download", "--", "--list"])
+                .args(&["-n", "-H", "lxc-create", "-n", "MELISA_PROBE_UNUSED", "-t", "download", "--", "--list"])
                 .output()
                 .await;
             
             let mut final_result = (Vec::new(), false);
 
             if let Ok(fb_out) = fallback {
-                if fb_out.status.success() {
-                    let content = String::from_utf8_lossy(&fb_out.stdout);
-                    if !content.is_empty() {
-                        let _ = fs::write(GLOBAL_CACHE, content.to_string()).await;
-                        let _ = Command::new("sudo").args(&["chmod", "666", GLOBAL_CACHE]).status().await;
-                        final_result = (parse_distro_list(&content), false);
-                    }
+                let content = String::from_utf8_lossy(&fb_out.stdout);
+                
+                // [CRITICAL FIX]: lxc-create will always return Exit Code 1 here because no container is generated.
+                // We MUST intercept the stdout stream and look for the data directly!
+                if !content.is_empty() && content.contains("Distribution") {
+                    let _ = fs::write(GLOBAL_CACHE, content.to_string()).await;
+                    let _ = Command::new("sudo").args(&["chmod", "666", GLOBAL_CACHE]).status().await;
+                    final_result = (parse_distro_list(&content), false);
                 } else {
                     eprintln!("[DEBUG] Fallback failed. Error: {}", String::from_utf8_lossy(&fb_out.stderr));
                 }
             }
 
-            // POST-EXECUTION CLEANUP: Destroy the probe container so it doesn't leave traces
-            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
+            // POST-EXECUTION CLEANUP
             let _ = Command::new("sudo")
                 .args(&["-n", "lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
                 .output()
