@@ -122,31 +122,37 @@ pub async fn delete_melisa_user(username: &str) {
 /// Generates and deploys a custom sudoers file for the user, defining their exact system privileges.
 async fn configure_sudoers(username: &str, role: UserRole) {
     // Base commands required for standard Git and LXC operations
+    // [UPGRADE]: Added /bin/ and /sbin/ paths to guarantee compatibility with Unmerged-/usr systems (Debian/Ubuntu)
     let mut commands = vec![
-        "/usr/bin/lxc-*",                         // Tambahkan ini (lokasi lxc-create, lxc-destroy, dll)
-        "/usr/sbin/lxc-*",                        // Tetap biarkan untuk antisipasi distro lain
-        "/usr/share/lxc/templates/lxc-download",  // Tambahkan whitelist untuk script download
-        "/usr/bin/git *",
-        "/usr/sbin/git *",
+        "/usr/bin/lxc-*", "/bin/lxc-*",
+        "/usr/sbin/lxc-*", "/sbin/lxc-*", 
+        "/usr/share/lxc/templates/lxc-download",
+        "/usr/bin/git *", "/bin/git *",
         "/usr/local/bin/melisa *",
-        "/usr/bin/mkdir -p *", 
-        "/usr/bin/rm -f *",
-        "/usr/bin/bash -c *",
-        "/usr/bin/tee *",
-        "/usr/bin/chattr *"
+        "/usr/bin/mkdir -p *", "/bin/mkdir -p *",
+        "/usr/bin/rm -f *", "/bin/rm -f *",
+        "/usr/bin/bash -c *", "/bin/bash -c *",
+        "/usr/bin/tee *", "/bin/tee *",
+        "/usr/bin/chattr *", "/bin/chattr *"
     ];
 
     match role {
         UserRole::Admin => {
             // Administrators receive elevated privileges for user and system management
+            // [UPGRADE]: Added explicit fallback paths for all core utilities
             commands.extend(vec![
-                "/usr/sbin/useradd *", "/usr/sbin/userdel *", "/usr/bin/passwd *",
-                "/usr/bin/pkill *", "/usr/bin/grep *", "/usr/bin/lxc-info *",
-                "/usr/bin/ls /etc/sudoers.d/", "/usr/bin/rm -f /etc/sudoers.d/melisa_*",
-                "/usr/bin/tee /etc/sudoers.d/melisa_*",
-                "/usr/bin/chmod *", "/usr/sbin/chmod *", 
-                "/usr/bin/chown *", "/usr/sbin/chown *",
-                "/usr/bin/mkdir *"
+                "/usr/sbin/useradd *", "/sbin/useradd *",
+                "/usr/sbin/userdel *", "/sbin/userdel *",
+                "/usr/bin/passwd *", "/bin/passwd *",
+                "/usr/bin/pkill *", "/bin/pkill *",
+                "/usr/bin/grep *", "/bin/grep *",
+                "/usr/bin/lxc-info *", "/bin/lxc-info *",
+                "/usr/bin/ls /etc/sudoers.d/", "/bin/ls /etc/sudoers.d/",
+                "/usr/bin/rm -f /etc/sudoers.d/melisa_*", "/bin/rm -f /etc/sudoers.d/melisa_*",
+                "/usr/bin/tee /etc/sudoers.d/melisa_*", "/bin/tee /etc/sudoers.d/melisa_*",
+                "/usr/bin/chmod *", "/bin/chmod *", "/usr/sbin/chmod *", "/sbin/chmod *",
+                "/usr/bin/chown *", "/bin/chown *", "/usr/sbin/chown *", "/sbin/chown *",
+                "/usr/bin/mkdir *", "/bin/mkdir *"
             ]);
         },
         UserRole::Regular => {

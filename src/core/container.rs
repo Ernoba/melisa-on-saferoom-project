@@ -15,6 +15,9 @@ use tracing::error; // Tambahkan 'error' di sini
 
 use indicatif::ProgressBar;
 
+// Import modul host_distro untuk perbaikan firewall dinamis
+use crate::distros::host_distro::{detect_host_distro, get_distro_config, FirewallKind};
+
 pub const LXC_PATH: &str = "/var/lib/lxc"; 
 
 #[derive(Debug, Clone)]
@@ -275,6 +278,7 @@ async fn unlock_container_dns(name: &str) {
 }
 
 /// Ensures the host system's LXC bridge network and firewall are active
+/// Upgraded to dynamically detect and configure the host's firewall rules
 pub async fn ensure_host_network_ready() {
     println!("{}[INFO]{} Re-initializing Host Network Infrastructure...", BOLD, RESET);
 
@@ -284,17 +288,38 @@ pub async fn ensure_host_network_ready() {
         .status()
         .await; 
 
-    // Ensure firewalld trusts the lxc bridge interface
-    let _ = Command::new("sudo")
-        .args(&["-n", "firewall-cmd", "--zone=trusted", "--add-interface=lxcbr0", "--permanent"])
-        .status()
-        .await; 
-    
-    // Reload firewall to apply changes immediately
-    let _ = Command::new("sudo")
-        .args(&["-n", "firewall-cmd", "--reload"])
-        .status()
-        .await; 
+    // Retrieve active host OS configuration to apply the correct firewall rules
+    let distro = detect_host_distro().await;
+    let cfg = get_distro_config(&distro);
+
+    match cfg.firewall_tool {
+        FirewallKind::Firewalld => {
+            let _ = Command::new("sudo")
+                .args(&["-n", "firewall-cmd", "--zone=trusted", "--add-interface=lxcbr0", "--permanent"])
+                .status()
+                .await; 
+            let _ = Command::new("sudo")
+                .args(&["-n", "firewall-cmd", "--reload"])
+                .status()
+                .await; 
+        },
+        FirewallKind::Ufw => {
+            let _ = Command::new("sudo")
+                .args(&["-n", "ufw", "allow", "in", "on", "lxcbr0"])
+                .status()
+                .await;
+            let _ = Command::new("sudo")
+                .args(&["-n", "ufw", "reload"])
+                .status()
+                .await;
+        },
+        FirewallKind::Iptables => {
+            let _ = Command::new("sudo")
+                .args(&["-n", "iptables", "-I", "INPUT", "-i", "lxcbr0", "-j", "ACCEPT"])
+                .status()
+                .await;
+        }
+    }
 }
 
 /// Helper function to check if a specific container is currently running

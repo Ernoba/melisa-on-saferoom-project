@@ -74,6 +74,8 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
 
     // 3. EXECUTE DATA RETRIEVAL
     // Use the "-n" (non-interactive) flag on sudo to prevent hanging if a password is required!
+    // NOTE: Keeping absolute path here as it is a template script, not a system bin. 
+    // If it fails, the dynamic fallback below will catch it.
     let output = Command::new("sudo")
         .args(&["-n", "/usr/share/lxc/templates/lxc-download", "--list"])
         .output()
@@ -94,14 +96,16 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
             eprintln!("\n[DEBUG] Main script failed. Error: {}", String::from_utf8_lossy(&out.stderr));
             
             // PRE-EMPTIVE CLEANUP: Destroy any leftover probe container from a previous execution
+            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
             let _ = Command::new("sudo")
-                .args(&["-n", "/usr/bin/lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
+                .args(&["-n", "lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
                 .output()
                 .await;
 
             // FALLBACK PROTOCOL
+            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
             let fallback = Command::new("sudo")
-                .args(&["-n", "/usr/bin/lxc-create", "-n", "MELISA_PROBE_UNUSED", "-t", "download", "--", "--list"])
+                .args(&["-n", "lxc-create", "-n", "MELISA_PROBE_UNUSED", "-t", "download", "--", "--list"])
                 .output()
                 .await;
             
@@ -121,8 +125,9 @@ pub async fn get_lxc_distro_list() -> (Vec<DistroMetadata>, bool) {
             }
 
             // POST-EXECUTION CLEANUP: Destroy the probe container so it doesn't leave traces
+            // [UPGRADE]: Removed absolute path to rely on system PATH dynamically
             let _ = Command::new("sudo")
-                .args(&["-n", "/usr/bin/lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
+                .args(&["-n", "lxc-destroy", "-n", "MELISA_PROBE_UNUSED", "-f"])
                 .output()
                 .await;
 

@@ -23,9 +23,11 @@ pub async fn check_if_admin(username: &str) -> bool {
     // Execute grep non-interactively via sudo (-n) to search for admin-only commands (e.g., 'useradd').
     // The '-n' flag is the secret weapon: it prevents the command from hanging and waiting
     // for a password prompt if the user does NOT have NOPASSWD privileges.
+    // [UPGRADE]: Removed absolute path "/usr/bin/grep" to rely on the system's dynamic PATH.
+    // This ensures compatibility with older Debian/Ubuntu systems where grep resides in /bin/grep.
     let check_admin = Command::new("sudo")
         .arg("-n") 
-        .args(&["/usr/bin/grep", "-qs", "useradd", &sudoers_path])
+        .args(&["grep", "-qs", "useradd", &sudoers_path])
         .status()
         .await;
 

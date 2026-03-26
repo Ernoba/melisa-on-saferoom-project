@@ -9,6 +9,9 @@ use crate::core::root_check::{check_root, is_ssh_session};
 use crate::cli::color_text::{GREEN, RED, CYAN, BOLD, RESET};
 use crate::core::project_management::PROJECTS_MASTER;
 
+// Import modul host_distro yang baru dibuat
+use crate::distros::host_distro::{detect_host_distro, get_distro_config, DistroConfig, FirewallKind};
+
 pub async fn install() {
     // 1. Access & Security Verification
     if !check_root() {
@@ -24,8 +27,13 @@ pub async fn install() {
 
     println!("\n{}MELISA SYSTEM & LXC INITIALIZATION (HOST MODE){}\n", BOLD, RESET);
 
-    // 1.5 Pre-flight Dependency Check
-    if !check_required_tools().await {
+    // 1.2 Detect Host Distribution
+    let distro = detect_host_distro().await;
+    let cfg = get_distro_config(&distro);
+    println!("{}[INFO]{} Host OS detected as: {:?}", CYAN, RESET, distro);
+
+    // 1.5 Pre-flight Dependency Check (Dynamic based on distro)
+    if !check_required_tools(&cfg).await {
         eprintln!("\n{}CRITICAL_FAILURE: The system is missing fundamental utilities required for deployment.{}", RED, RESET);
         std::process::exit(1);
     }
@@ -33,18 +41,46 @@ pub async fn install() {
     // 2. Local Environment Verification
     verify_data_environment().await;
 
-    // 3. Package Installation (System command definitions)
+    // 3. Package Installation (Dynamic Command Construction)
+    let update_cmd = cfg.update_args.clone();
+    
+    let install_base = if cfg.pkg_manager == "pacman" {
+        vec!["-S", "--noconfirm"]
+    } else {
+        vec!["install", "-y"]
+    };
+
+    let mut lxc_install_args = install_base.clone();
+    lxc_install_args.extend(cfg.lxc_packages.clone());
+
+    let mut sec_install_args = install_base.clone();
+    sec_install_args.push(cfg.ssh_package);
+    
+    // Add firewall package based on detection
+    match cfg.firewall_tool {
+        FirewallKind::Firewalld => sec_install_args.push("firewalld"),
+        FirewallKind::Ufw => sec_install_args.push("ufw"),
+        FirewallKind::Iptables => sec_install_args.push("iptables"),
+    }
+
+    let mut sys_enable_args = vec!["enable", "--now", "lxc.service", "lxc-net.service", cfg.ssh_service];
+    match cfg.firewall_tool {
+        FirewallKind::Firewalld => sys_enable_args.push("firewalld"),
+        FirewallKind::Ufw => sys_enable_args.push("ufw"),
+        FirewallKind::Iptables => {}, // iptables usually doesn't have a direct service to enable like this
+    }
+
     let commands = vec![
-        ("Synchronizing package repositories", "dnf", vec!["update", "-y"]),
-        ("Installing Virtualization & Bridge tools", "dnf", vec!["install", "-y", "lxc", "lxc-templates", "libvirt", "bridge-utils"]),
-        ("Installing SSH & Security components", "dnf", vec!["install", "-y", "openssh-server", "firewalld"]),
+        ("Synchronizing package repositories", cfg.pkg_manager, update_cmd),
+        ("Installing Virtualization & Bridge tools", cfg.pkg_manager, lxc_install_args),
+        ("Installing SSH & Security components", cfg.pkg_manager, sec_install_args),
         ("Loading veth kernel module", "modprobe", vec!["veth"]),
-        ("Enabling LXC, SSH, & Firewall services", "systemctl", vec!["enable", "--now", "lxc.service", "lxc-net.service", "sshd", "firewalld"]),
+        ("Enabling LXC, SSH, & Firewall services", "systemctl", sys_enable_args),
     ];
 
-    // Allocate 10 minutes (600 seconds) timeout for heavy operations like dnf, 60 seconds for others
+    // Allocate 10 minutes (600 seconds) timeout for heavy operations, 60 seconds for others
     for (desc, prog, args) in commands {
-        let timeout_limit = if prog == "dnf" { 600 } else { 60 };
+        let timeout_limit = if prog == cfg.pkg_manager { 600 } else { 60 };
         if !execute_step(desc, prog, &args, timeout_limit).await {
             eprintln!("\n{}CRITICAL_FAILURE: Deployment terminated abruptly at step '{}'{}", RED, desc, RESET);
             std::process::exit(1);
@@ -53,7 +89,7 @@ pub async fn install() {
 
     // 4. Infrastructure Deployment & Configuration
     deploy_melisa_binary().await;
-    setup_ssh_firewall().await;
+    setup_ssh_firewall(&cfg.firewall_tool).await;
     setup_lxc_network_quota().await;
     setup_projects_directory().await;
     configure_git_security().await;
@@ -121,9 +157,19 @@ async fn backup_file(path: &str) {
     }
 }
 
-async fn check_required_tools() -> bool {
+async fn check_required_tools(cfg: &DistroConfig) -> bool {
     println!("{}Verifying Required System Tools...{}", BOLD, RESET);
-    let tools = vec!["dnf", "modprobe", "systemctl", "firewall-cmd", "git", "chown", "chmod", "grep"];
+    
+    // Core tools required regardless of OS
+    let mut tools = vec!["modprobe", "systemctl", "git", "chown", "chmod", "grep", cfg.pkg_manager];
+    
+    // Dynamic firewall tool check
+    match cfg.firewall_tool {
+        FirewallKind::Firewalld => tools.push("firewall-cmd"),
+        FirewallKind::Ufw => tools.push("ufw"),
+        FirewallKind::Iptables => tools.push("iptables"),
+    }
+
     let mut all_passed = true;
 
     for tool in tools {
@@ -251,40 +297,43 @@ async fn deploy_melisa_binary() {
     }
 }
 
-/// Configures the host's firewall to allow SSH access and trust the LXC bridge.
+/// Configures the host's firewall dynamically based on the active OS.
 /// This ensures both remote management and container connectivity are fully functional.
-async fn setup_ssh_firewall() {
+async fn setup_ssh_firewall(firewall: &FirewallKind) {
     println!("\nConfiguring Host Firewall for SSH and Network Bridge Access...");
 
-    // 1. Enable SSH service access permanently
-    let ssh_status = execute_silent_task(
-        "firewall-cmd", 
-        &["--add-service=ssh", "--permanent"], 
-        "Adding SSH service to firewall rules", 
-        10
-    ).await;
-
-    // 2. Trust the LXC bridge interface (lxcbr0) permanently
-    // This is critical: without this, the host's firewall might block DHCP or internet traffic for containers.
-    let bridge_status = execute_silent_task(
-        "firewall-cmd", 
-        &["--zone=trusted", "--add-interface=lxcbr0", "--permanent"], 
-        "Assigning lxcbr0 to trusted firewall zone", 
-        10
-    ).await;
-
-    // 3. Reload the firewall to apply all permanent changes immediately
-    let reload_status = execute_silent_task(
-        "firewall-cmd", 
-        &["--reload"], 
-        "Reloading firewall configuration", 
-        15
-    ).await;
-    
-    if ssh_status && bridge_status && reload_status {
-        println!("  {:<50} [ {}OK{} ]", "Firewall ready: SSH and LXC Bridge are now authorized", GREEN, RESET);
-    } else {
-        eprintln!("  {:<50} [ {}FAILED{} ]", "Critical error during firewall deployment", RED, RESET);
+    match firewall {
+        FirewallKind::Firewalld => {
+            let ssh_status = execute_silent_task(
+                "firewall-cmd", &["--add-service=ssh", "--permanent"], "Adding SSH service to firewall rules", 10
+            ).await;
+            let bridge_status = execute_silent_task(
+                "firewall-cmd", &["--zone=trusted", "--add-interface=lxcbr0", "--permanent"], "Assigning lxcbr0 to trusted firewall zone", 10
+            ).await;
+            let reload_status = execute_silent_task(
+                "firewall-cmd", &["--reload"], "Reloading firewall configuration", 15
+            ).await;
+            
+            if ssh_status && bridge_status && reload_status {
+                println!("  {:<50} [ {}OK{} ]", "Firewall ready: SSH and LXC Bridge are now authorized", GREEN, RESET);
+            } else {
+                eprintln!("  {:<50} [ {}FAILED{} ]", "Critical error during firewall deployment", RED, RESET);
+            }
+        },
+        FirewallKind::Ufw => {
+            let _ = execute_silent_task("ufw", &["allow", "ssh"], "Allowing SSH in UFW", 10).await;
+            let _ = execute_silent_task("ufw", &["allow", "in", "on", "lxcbr0"], "Trusting lxcbr0 interface in UFW", 10).await;
+            let _ = execute_silent_task("ufw", &["--force", "enable"], "Enabling UFW firewall", 10).await;
+            let _ = execute_silent_task("ufw", &["reload"], "Reloading UFW configuration", 10).await;
+            
+            println!("  {:<50} [ {}OK{} ]", "UFW ready: SSH and LXC Bridge are now authorized", GREEN, RESET);
+        },
+        FirewallKind::Iptables => {
+            let _ = execute_silent_task("iptables", &["-A", "INPUT", "-p", "tcp", "--dport", "22", "-j", "ACCEPT"], "Allowing SSH via iptables", 10).await;
+            let _ = execute_silent_task("iptables", &["-A", "INPUT", "-i", "lxcbr0", "-j", "ACCEPT"], "Trusting lxcbr0 via iptables", 10).await;
+            
+            println!("  {:<50} [ {}OK{} ]", "Iptables ready: SSH and LXC Bridge are now authorized", GREEN, RESET);
+        }
     }
 }
 
