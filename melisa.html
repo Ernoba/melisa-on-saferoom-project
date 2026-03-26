@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analisis Teknikal Komprehensif — MELISA Saferoom Project</title>
+<style>
+:root {
+  --rust:#ce422b;--rust-d:#9e2e1b;--rust-l:rgba(206,66,43,0.12);
+  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2333;--bg4:#21262d;
+  --border:#30363d;--border2:#3d444d;
+  --text:#e6edf3;--muted:#8b949e;--muted2:#6e7681;
+  --blue:#58a6ff;--green:#3fb950;--yellow:#d29922;
+  --orange:#f0883e;--purple:#a371f7;--cyan:#39c5cf;
+  --red:#f85149;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14.5px;line-height:1.75}
+
+/* ── COVER ── */
+.cover{background:linear-gradient(160deg,#0d1117 0%,#1a0805 45%,#0d1117 100%);border-bottom:3px solid var(--rust);padding:90px 60px 70px;text-align:center;position:relative;overflow:hidden}
+.cover::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 70% 50% at 50% 0%,rgba(206,66,43,.14),transparent)}
+.cover::after{content:'MELISA';position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);font-size:200px;font-weight:900;color:rgba(206,66,43,.04);letter-spacing:-8px;white-space:nowrap;pointer-events:none}
+.cover-chip{display:inline-block;background:rgba(206,66,43,.15);border:1px solid var(--rust);color:var(--rust);padding:4px 16px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:28px}
+.cover h1{font-size:68px;font-weight:900;letter-spacing:-2px;line-height:1;margin-bottom:10px;background:linear-gradient(135deg,#fff 20%,var(--rust) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.cover-subtitle{font-size:22px;color:var(--muted);margin-bottom:12px;font-weight:300}
+.cover-tagline{font-size:14px;color:var(--muted2);max-width:650px;margin:0 auto 44px}
+.cover-pills{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:50px}
+.pill{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--muted)}
+.pill span{width:7px;height:7px;border-radius:50%;display:inline-block}
+.pill span.r{background:var(--rust)}
+.pill span.g{background:var(--green)}
+.pill span.b{background:var(--blue)}
+.pill span.y{background:var(--yellow)}
+.pill span.p{background:var(--purple)}
+.pill span.c{background:var(--cyan)}
+.cover-stats{display:flex;justify-content:center;gap:40px;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .v{font-size:36px;font-weight:800;color:var(--rust);display:block;line-height:1}
+.stat .l{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.5px;margin-top:4px}
+
+/* ── LAYOUT ── */
+.wrap{max-width:1080px;margin:0 auto;padding:0 36px 80px}
+
+/* ── TOC ── */
+.toc{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:36px 44px;margin:52px 0}
+.toc-title{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--muted2);margin-bottom:24px;display:flex;align-items:center;gap:8px}
+.toc-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.toc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 40px}
+.toc-item{display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px}
+.toc-item:last-child{border:none}
+.toc-num{color:var(--rust);font-weight:700;font-size:12px;min-width:22px}
+.toc-item a{color:var(--blue);text-decoration:none}
+.toc-item a:hover{color:var(--cyan);text-decoration:underline}
+
+/* ── SECTIONS ── */
+.sec{margin:72px 0}
+.sec-hd{display:flex;align-items:center;gap:18px;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.sec-num{width:48px;height:48px;background:var(--rust);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0;box-shadow:0 4px 20px rgba(206,66,43,.35)}
+.sec h2{font-size:28px;font-weight:800;color:var(--text)}
+.sec h3{font-size:17px;font-weight:700;color:var(--orange);margin:30px 0 14px;display:flex;align-items:center;gap:10px}
+.sec h3::before{content:'';display:inline-block;width:4px;height:20px;background:var(--orange);border-radius:2px;flex-shrink:0}
+.sec h4{font-size:15px;font-weight:700;color:var(--cyan);margin:22px 0 10px}
+.sec p{color:#c9d1d9;margin-bottom:16px;max-width:820px}
+.sec ul,.sec ol{padding-left:22px;color:#c9d1d9;margin-bottom:16px}
+.sec li{margin-bottom:7px}
+
+/* ── CARDS ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;margin:22px 0}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;transition:border-color .2s,transform .15s}
+.card:hover{border-color:var(--rust);transform:translateY(-2px)}
+.card-icon{font-size:26px;margin-bottom:12px;display:block}
+.card h4{font-size:14px;font-weight:700;color:var(--text);margin:0 0 8px}
+.card p{font-size:13px;color:var(--muted);margin:0}
+.card.blue:hover{border-color:var(--blue)}
+.card.green:hover{border-color:var(--green)}
+.card.purple:hover{border-color:var(--purple)}
+
+/* ── FLOW DIAGRAMS ── */
+.flow{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 32px;margin:22px 0;overflow-x:auto}
+.flow-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted2);margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.flow-label::after{content:'';flex:1;height:1px;background:var(--border)}
+.flow-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.flow-row:last-child{margin:0}
+.fb{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap}
+.fb.r{border-color:var(--rust);color:var(--rust)}
+.fb.g{border-color:var(--green);color:var(--green)}
+.fb.b{border-color:var(--blue);color:var(--blue)}
+.fb.y{border-color:var(--yellow);color:var(--yellow)}
+.fb.p{border-color:var(--purple);color:var(--purple)}
+.fb.c{border-color:var(--cyan);color:var(--cyan)}
+.arr{color:var(--muted2);font-size:16px;flex-shrink:0}
+.flow-indent{padding-left:36px}
+
+/* ── CODE BLOCKS ── */
+.code{background:#010409;border:1px solid var(--border);border-left:3px solid var(--rust);border-radius:0 8px 8px 0;padding:20px 24px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:12.5px;overflow-x:auto;margin:14px 0;color:#e6edf3;line-height:1.65}
+.code.bash{border-left-color:var(--green)}
+.code.shell{border-left-color:var(--blue)}
+.code.toml{border-left-color:var(--yellow)}
+.kw{color:#ff7b72}
+.fn{color:#d2a8ff}
+.str{color:#a5d6ff}
+.cm{color:var(--muted2);font-style:italic}
+.num{color:#79c0ff}
+.tp{color:#ffa657}
+.op{color:#79c0ff}
+.cp{color:var(--green)}
+
+/* ── SECURITY LAYERS ── */
+.sec-layers{margin:28px 0}
+.sec-layer{display:flex;gap:18px;margin-bottom:14px}
+.lay-num{width:36px;height:36px;border-radius:50%;background:var(--rust);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;margin-top:2px;box-shadow:0 0 0 4px rgba(206,66,43,.15)}
+.lay-body{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--rust);border-radius:0 10px 10px 0;padding:16px 22px;flex:1}
+.lay-body h5{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lay-body p{font-size:13px;color:var(--muted);margin:0}
+.badge{font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;white-space:nowrap}
+.badge.unique{background:rgba(206,66,43,.2);color:var(--rust)}
+.badge.standard{background:rgba(63,185,80,.15);color:var(--green)}
+.badge.advanced{background:rgba(88,166,255,.15);color:var(--blue)}
+
+/* ── DISTRO TABLE ── */
+.dtable{width:100%;border-collapse:collapse;margin:22px 0;font-size:13px}
+.dtable th{background:var(--bg3);padding:11px 14px;text-align:left;border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.dtable td{padding:11px 14px;border:1px solid var(--border);vertical-align:top;color:#c9d1d9}
+.dtable tr:hover td{background:rgba(255,255,255,.025)}
+.dtable td code{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-family:monospace;font-size:11px}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap}
+.tag.win{background:rgba(63,185,80,.15);color:var(--green)}
+.tag.warn{background:rgba(210,153,34,.15);color:var(--yellow)}
+.tag.info{background:rgba(88,166,255,.15);color:var(--blue)}
+.tag.err{background:rgba(248,81,73,.15);color:var(--red)}
+.tag.rust{background:rgba(206,66,43,.15);color:var(--rust)}
+
+/* ── COMPARE TABLE ── */
+.ctable{width:100%;border-collapse:collapse;margin:22px 0;font-size:12.5px}
+.ctable th{background:var(--bg3);padding:10px 13px;text-align:center;border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.ctable th:first-child{text-align:left}
+.ctable td{padding:10px 13px;border:1px solid var(--border);vertical-align:middle;color:#c9d1d9;text-align:center}
+.ctable td:first-child{text-align:left;font-weight:600;color:var(--text);background:rgba(255,255,255,.02)}
+.ctable tr:hover td{background:rgba(255,255,255,.02)}
+
+/* ── COMMAND REFERENCE ── */
+.cmd-grid{display:grid;grid-template-columns:1fr;gap:16px;margin:22px 0}
+.cmd-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.cmd-header{background:var(--bg3);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.cmd-name{font-family:monospace;font-size:14px;font-weight:700;color:var(--rust)}
+.cmd-role{font-size:10px;padding:2px 9px;border-radius:8px;font-weight:700}
+.cmd-role.admin{background:rgba(206,66,43,.2);color:var(--rust)}
+.cmd-role.user{background:rgba(63,185,80,.15);color:var(--green)}
+.cmd-role.all{background:rgba(88,166,255,.15);color:var(--blue)}
+.cmd-body{padding:16px 20px}
+.cmd-desc{font-size:13px;color:var(--muted);margin-bottom:12px}
+.cmd-usage{background:#010409;border-radius:6px;padding:10px 14px;font-family:monospace;font-size:12px;color:var(--cyan);margin-bottom:10px}
+.cmd-notes{font-size:12px;color:var(--muted2);font-style:italic}
+
+/* ── HIGHLIGHT BOXES ── */
+.hbox{border-radius:12px;padding:22px 26px;margin:22px 0}
+.hbox.rust{background:linear-gradient(135deg,rgba(206,66,43,.1),rgba(206,66,43,.04));border:1px solid rgba(206,66,43,.3)}
+.hbox.blue{background:linear-gradient(135deg,rgba(88,166,255,.1),rgba(88,166,255,.03));border:1px solid rgba(88,166,255,.25)}
+.hbox.green{background:linear-gradient(135deg,rgba(63,185,80,.1),rgba(63,185,80,.03));border:1px solid rgba(63,185,80,.25)}
+.hbox.yellow{background:linear-gradient(135deg,rgba(210,153,34,.1),rgba(210,153,34,.03));border:1px solid rgba(210,153,34,.25)}
+.hbox.purple{background:linear-gradient(135deg,rgba(163,113,247,.1),rgba(163,113,247,.03));border:1px solid rgba(163,113,247,.25)}
+.hbox h4{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.hbox.rust h4{color:var(--rust)}
+.hbox.blue h4{color:var(--blue)}
+.hbox.green h4{color:var(--green)}
+.hbox.yellow h4{color:var(--yellow)}
+.hbox.purple h4{color:var(--purple)}
+.hbox p,.hbox li{font-size:13px;color:var(--muted);margin-bottom:6px}
+.hbox ul{padding-left:18px}
+
+/* ── ROADMAP ── */
+.roadmap{position:relative;padding-left:36px;margin:24px 0}
+.roadmap::before{content:'';position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:linear-gradient(to bottom,var(--rust) 0%,rgba(206,66,43,.15) 100%)}
+.rm-item{position:relative;margin-bottom:26px}
+.rm-item::before{content:'';position:absolute;left:-30px;top:6px;width:14px;height:14px;border-radius:50%;border:2px solid var(--rust);background:var(--bg)}
+.rm-item h5{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
+.rm-item p{font-size:13px;color:var(--muted);margin:0}
+.rm-item .phase{font-size:10px;font-weight:700;padding:2px 9px;border-radius:8px;margin-left:10px}
+.rm-item .phase.now{background:rgba(63,185,80,.15);color:var(--green)}
+.rm-item .phase.soon{background:rgba(88,166,255,.15);color:var(--blue)}
+.rm-item .phase.future{background:rgba(210,153,34,.1);color:var(--yellow)}
+
+/* ── STEP GUIDE ── */
+.steps{margin:24px 0;counter-reset:step}
+.step{display:flex;gap:18px;margin-bottom:22px}
+.step-num{width:32px;height:32px;border-radius:50%;background:var(--rust);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;margin-top:2px}
+.step-body h5{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.step-body p{font-size:13px;color:var(--muted);margin:0 0 8px}
+
+/* ── INLINE CODE ── */
+code{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-family:monospace;font-size:12px;color:var(--orange)}
+
+/* ── DIVIDER ── */
+.divider{border:none;border-top:1px solid var(--border);margin:48px 0}
+
+/* ── FOOTER ── */
+.footer{border-top:1px solid var(--border);padding:36px 40px;text-align:center;color:var(--muted2);font-size:12px;margin-top:80px;background:var(--bg2)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ COVER ══════════════════════════ -->
+<div class="cover">
+  <div class="cover-chip">Analisis Teknikal Komprehensif · 2026</div>
+  <h1>MELISA</h1>
+  <div class="cover-subtitle">Management Environment Linux Sandbox</div>
+  <div class="cover-tagline">Dokumen analisis mendalam — arsitektur sistem, alur kerja seluruh fitur, dukungan multi-distro Linux, lapisan keamanan berlapis, perbandingan dengan Docker dan Kubernetes, serta proyeksi pengembangan jangka panjang. Disusun berdasarkan review lengkap seluruh kode sumber versi 0.1.2.</div>
+  <div class="cover-pills">
+    <div class="pill"><span class="r"></span>Rust + Tokio Async</div>
+    <div class="pill"><span class="g"></span>LXC Native Container</div>
+    <div class="pill"><span class="b"></span>SSH Remote Pipeline</div>
+    <div class="pill"><span class="y"></span>Multi-Distro Linux</div>
+    <div class="pill"><span class="p"></span>Jail Shell Security</div>
+    <div class="pill"><span class="c"></span>Bash Client</div>
+  </div>
+  <div class="cover-stats">
+    <div class="stat"><span class="v">Rust</span><span class="l">Bahasa Inti</span></div>
+    <div class="stat"><span class="v">4+</span><span class="l">Distro Didukung</span></div>
+    <div class="stat"><span class="v">8</span><span class="l">Lapisan Keamanan</span></div>
+    <div class="stat"><span class="v">25+</span><span class="l">Perintah CLI</span></div>
+    <div class="stat"><span class="v">6</span><span class="l">Modul Inti</span></div>
+    <div class="stat"><span class="v">MIT</span><span class="l">Lisensi</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ══════════════════════════ TOC ══════════════════════════ -->
+<div class="toc">
+  <div class="toc-title">Daftar Isi Lengkap</div>
+  <div class="toc-grid">
+    <div class="toc-item"><span class="toc-num">01</span><a href="#s1">Identitas, Filosofi & Visi MELISA</a></div>
+    <div class="toc-item"><span class="toc-num">02</span><a href="#s2">Arsitektur Sistem & Struktur Modul</a></div>
+    <div class="toc-item"><span class="toc-num">03</span><a href="#s3">Dukungan Multi-Distro Linux</a></div>
+    <div class="toc-item"><span class="toc-num">04</span><a href="#s4">Alur Kerja Lengkap — Fase per Fase</a></div>
+    <div class="toc-item"><span class="toc-num">05</span><a href="#s5">Panduan Instalasi Server (Host)</a></div>
+    <div class="toc-item"><span class="toc-num">06</span><a href="#s6">Panduan Instalasi Klien (Remote)</a></div>
+    <div class="toc-item"><span class="toc-num">07</span><a href="#s7">Referensi Perintah CLI Lengkap</a></div>
+    <div class="toc-item"><span class="toc-num">08</span><a href="#s8">Sistem Manajemen Container</a></div>
+    <div class="toc-item"><span class="toc-num">09</span><a href="#s9">Sistem Manajemen Pengguna</a></div>
+    <div class="toc-item"><span class="toc-num">10</span><a href="#s10">Sistem Proyek & Kolaborasi Tim</a></div>
+    <div class="toc-item"><span class="toc-num">11</span><a href="#s11">SSH Pipeline & Remote Execution</a></div>
+    <div class="toc-item"><span class="toc-num">12</span><a href="#s12">Lapisan Keamanan Berlapis 8 Tingkat</a></div>
+    <div class="toc-item"><span class="toc-num">13</span><a href="#s13">Desain Async & Kompleksitas Teknikal</a></div>
+    <div class="toc-item"><span class="toc-num">14</span><a href="#s14">MELISA vs Docker vs Kubernetes</a></div>
+    <div class="toc-item"><span class="toc-num">15</span><a href="#s15">Peta Jalan Pengembangan</a></div>
+    <div class="toc-item"><span class="toc-num">16</span><a href="#s16">Kesimpulan & Penilaian Akhir</a></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 1 ══════════════════════════ -->
+<div class="sec" id="s1">
+  <div class="sec-hd"><div class="sec-num">1</div><h2>Identitas, Filosofi & Visi MELISA</h2></div>
+
+  <p>MELISA adalah akronim dari <strong>Management Environment Linux Sandbox</strong> — sebuah sistem orkestrasi container berbasis LXC yang ditulis sepenuhnya dalam bahasa pemrograman Rust. Dikembangkan oleh <strong>Erick Adriano Sebastian</strong> (ernobaproject@gmail.com) di bawah proyek yang bernama <em>Saferoom</em>, MELISA lahir dari sebuah frustrasi yang sangat nyata di dunia pengembangan perangkat lunak: masalah <em>Host Pollution</em>.</p>
+
+  <p>Host Pollution adalah kondisi di mana sistem operasi utama seorang developer semakin kotor dan tidak stabil karena berisi tumpukan dependensi dari berbagai proyek yang berbeda — Python 3.8 dari proyek A bertabrakan dengan Python 3.11 dari proyek B, paket npm global yang saling bentrok, variabel environment yang bocor, dan library sistem yang terkontaminasi. MELISA hadir dengan satu tujuan mutlak: setiap pekerjaan dilakukan di dalam ruang bersih yang terisolasi, dan ketika selesai, ruang itu bisa dibuang atau dipertahankan tanpa pernah mengotori host.</p>
+
+  <h3>Filosofi "Saferoom" dan "Clean Room"</h3>
+  <p>Nama proyek <em>Saferoom</em> bukan sekadar nama keren. Ia mencerminkan filosofi inti: setiap container MELISA adalah <em>ruang aman</em> di mana developer bisa bereksperimen, merusak, dan membangun ulang tanpa konsekuensi pada sistem utama. Pengembang menggunakan analogi "butler" — MELISA seperti pelayan yang selalu menyiapkan <em>clean room</em> setiap kali Anda ingin coding, dan membersihkannya kembali saat Anda selesai.</p>
+
+  <div class="cards">
+    <div class="card">
+      <span class="card-icon">🦀</span>
+      <h4>Mengapa Rust?</h4>
+      <p>Rust dipilih bukan karena tren, melainkan karena kebutuhan. Memory safety tanpa garbage collector berarti MELISA tidak akan pernah crash akibat dangling pointer atau null dereference — kritis untuk sebuah tool yang mengelola container sistem. Tokio async runtime memberikan concurrency setara Go namun dengan overhead jauh lebih kecil. Binary Rust yang dioptimasi bisa berukuran sangat kecil dan tidak memerlukan runtime tambahan di server.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🐧</span>
+      <h4>Mengapa LXC?</h4>
+      <p>LXC (Linux Containers) adalah teknologi virtualisasi tingkat OS yang sudah tertanam langsung di kernel Linux sejak versi 2.6.24. Berbeda dari Docker yang membangun abstraksi di atas namespaces dan cgroups, LXC menggunakan mekanisme tersebut secara langsung — menghasilkan container yang lebih "mirip VM" (punya init process sendiri, systemd, service daemon) namun dengan overhead yang mendekati nol.</p>
+    </div>
+    <div class="card blue">
+      <span class="card-icon">🔗</span>
+      <h4>Hybrid Architecture</h4>
+      <p>Keputusan untuk menulis server dalam Rust dan klien dalam Bash adalah keputusan brilian. Server memerlukan performa, safety, dan akses ke API sistem — Rust ideal. Klien cukup menjadi relay cerdas via SSH — Bash sempurna karena tersedia di hampir setiap mesin Linux/macOS tanpa instalasi apapun.</p>
+    </div>
+    <div class="card green">
+      <span class="card-icon">👥</span>
+      <h4>Dirancang untuk Tim</h4>
+      <p>Tidak seperti tool container lain yang berfokus pada deployment aplikasi, MELISA dirancang dari awal untuk skenario multi-user — tim developer yang berbagi satu server, dengan proyek bersama, kontrol akses berbeda per orang, dan alur kolaborasi yang terintegrasi langsung ke dalam tool tanpa membutuhkan platform eksternal.</p>
+    </div>
+    <div class="card purple">
+      <span class="card-icon">🏰</span>
+      <h4>Security-First Design</h4>
+      <p>Di MELISA, keamanan bukan fitur tambahan yang ditempel setelah sistem dibangun. Ia adalah bagian dari setiap keputusan desain sejak awal — dari mengapa setup wajib fisik, hingga mengapa setiap user punya file sudoers tersendiri, hingga mengapa DNS di dalam container dikunci dengan atribut immutable.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">📖</span>
+      <h4>Open Source &amp; MIT</h4>
+      <p>Dilisensikan di bawah MIT License, MELISA sepenuhnya terbuka untuk digunakan, dimodifikasi, dan didistribusikan — termasuk untuk keperluan komersial. Ini mencerminkan komitmen pengembang terhadap komunitas open-source Linux.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 2 ══════════════════════════ -->
+<div class="sec" id="s2">
+  <div class="sec-hd"><div class="sec-num">2</div><h2>Arsitektur Sistem & Struktur Modul</h2></div>
+
+  <p>MELISA terdiri dari dua komponen besar yang bekerja secara terpisah namun terintegrasi melalui protokol SSH: <strong>MELISA Host (Server)</strong> yang ditulis dalam Rust, dan <strong>MELISA Client (Remote)</strong> yang ditulis dalam Bash. Pemisahan ini disengaja untuk memberikan fleksibilitas maksimum dan keamanan — server menjalankan semua operasi privileged, sementara klien hanya berfungsi sebagai relay perintah yang cerdas.</p>
+
+  <h3>Peta Arsitektur Keseluruhan</h3>
+  <div class="flow">
+    <div class="flow-label">System Architecture Overview</div>
+    <div class="flow-row">
+      <div class="fb b">Laptop / Workstation</div>
+      <div class="arr">──SSH──▶</div>
+      <div class="fb r">MELISA Host (Linux Server)</div>
+      <div class="arr">──▶</div>
+      <div class="fb g">LXC Containers</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="fb">melisa (Bash Script)</div>
+      <div class="arr">tunnels via</div>
+      <div class="fb r">melisa binary (Rust)</div>
+      <div class="arr">manages</div>
+      <div class="fb g">container-1</div>
+      <div class="arr">|</div>
+      <div class="fb g">container-2</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="fb">auth.sh / exec.sh</div>
+      <div class="arr">▶</div>
+      <div class="fb">SUID + Jail Shell</div>
+      <div class="arr">▶</div>
+      <div class="fb y">lxcbr0 bridge</div>
+      <div class="arr">▶</div>
+      <div class="fb">Internet</div>
+    </div>
+  </div>
+
+  <h3>Struktur Direktori Kode Sumber (Rust)</h3>
+  <div class="code">
+<span class="cm"># Hierarki modul src/ — Setiap folder adalah domain fungsional</span>
+src/
+├── main.rs               <span class="cm">← Entry point: root check, arg parsing, REPL init</span>
+├── cli/                  <span class="cm">← Semua yang berhubungan dengan tampilan & interaksi terminal</span>
+│   ├── melisa_cli.rs     <span class="cm">← Loop REPL utama berbasis rustyline</span>
+│   ├── executor.rs       <span class="cm">← Router perintah: parse input → panggil fungsi async</span>
+│   ├── helper.rs         <span class="cm">← Autocompletion, syntax highlighting, bracket validation</span>
+│   ├── prompt.rs         <span class="cm">← Generator prompt dinamis (user@saferoom:/path$)</span>
+│   ├── loading.rs        <span class="cm">← Spinner progress bar async (indicatif)</span>
+│   ├── wellcome.rs       <span class="cm">← Banner startup dengan system telemetry</span>
+│   └── color_text.rs     <span class="cm">← Konstanta ANSI color codes</span>
+├── core/                 <span class="cm">← Domain logika bisnis utama</span>
+│   ├── container.rs      <span class="cm">← CRUD container, network config, metadata</span>
+│   ├── user_management.rs<span class="cm">← Provisioning user, sudoers, role management</span>
+│   ├── project_management.rs <span class="cm">← Master project, invite, pull, sync</span>
+│   ├── setup.rs          <span class="cm">← One-time host initialization wizard</span>
+│   ├── root_check.rs     <span class="cm">← Privilege verification & admin check</span>
+│   └── metadata.rs       <span class="cm">← Serialisasi/deserialisasi metadata container (TOML)</span>
+└── distros/              <span class="cm">← Abstraksi distribusi Linux</span>
+    ├── distro.rs         <span class="cm">← LXC distro catalog dengan concurrent caching</span>
+    └── host_distro.rs    <span class="cm">← Host OS detection & config mapping</span>
+  </div>
+
+  <h3>Dependency Stack (Cargo.toml)</h3>
+  <p>Setiap dependency dipilih dengan sangat cermat untuk keperluan spesifik. Tidak ada dependency yang berlebihan atau sekedar "nice to have":</p>
+  <div class="code toml">
+<span class="cm"># Cargo.toml — Analisis Dependency</span>
+[dependencies]
+tokio      = <span class="str">"1.50.0"</span>  features=["full"]  <span class="cm"># Async runtime — jantung MELISA</span>
+rustyline  = <span class="str">"17.0.2"</span> features=["derive"] <span class="cm"># REPL interaktif: history, autocomplete, highlight</span>
+serde      = <span class="str">"1.0"</span>    features=["derive"] <span class="cm"># Serialisasi struct ke/dari TOML</span>
+toml       = <span class="str">"1.0"</span>                      <span class="cm"># Baca/tulis file metadata container</span>
+sysinfo    = <span class="str">"0.38.4"</span>                   <span class="cm"># CPU, RAM, GPU info untuk banner startup</span>
+chrono     = <span class="str">"0.4"</span>                      <span class="cm"># Timestamp pada banner & log</span>
+uuid       = <span class="str">"1.0"</span>    features=["v4"]    <span class="cm"># ID unik per container</span>
+indicatif  = <span class="str">"0.18.4"</span>                   <span class="cm"># Progress bar / spinner untuk operasi panjang</span>
+rand       = <span class="str">"0.8.5"</span>                    <span class="cm"># Random MAC address generation</span>
+crossterm  = <span class="str">"0.27"</span>                     <span class="cm"># Terminal control cross-platform</span>
+ctrlc      = <span class="str">"3.4"</span>                      <span class="cm"># Graceful Ctrl+C handler</span>
+thiserror  = <span class="str">"2.0"</span>                      <span class="cm"># Structured error type derivation</span>
+tracing    = <span class="str">"0.1.44"</span>                   <span class="cm"># Structured logging & diagnostics</span>
+colored    = <span class="str">"2.1.0"</span>                    <span class="cm"># Coloring terminal output (Rust-side)</span>
+libc       = <span class="str">"0.2.183"</span>                  <span class="cm"># Akses langsung ke POSIX/libc API</span>
+
+[profile.release]
+opt-level    = <span class="str">'z'</span>   <span class="cm"># Optimasi ukuran biner (bukan kecepatan)</span>
+lto          = <span class="kw">true</span>  <span class="cm"># Link Time Optimization — hapus dead code</span>
+codegen-units = <span class="num">1</span>    <span class="cm"># Parallelisme rendah → optimasi lebih baik</span>
+panic        = <span class="str">'abort'</span> <span class="cm"># Hilangkan unwinding logic saat panic</span>
+strip        = <span class="kw">true</span>  <span class="cm"># Hapus debug symbols dari binary final</span>
+  </div>
+
+  <div class="hbox blue">
+    <h4>⚡ Dampak Release Optimization</h4>
+    <p>Kombinasi <code>opt-level='z'</code> + <code>lto=true</code> + <code>strip=true</code> menghasilkan binary MELISA yang sangat kecil (estimasi &lt;5MB) tanpa overhead runtime. Ini berarti MELISA bisa dideploy bahkan di server dengan storage terbatas, dan waktu startup hampir instan. <code>panic='abort'</code> juga berarti tidak ada kemungkinan stack unwinding yang bisa dieksploitasi untuk information leakage.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 3 ══════════════════════════ -->
+<div class="sec" id="s3">
+  <div class="sec-hd"><div class="sec-num">3</div><h2>Dukungan Multi-Distro Linux</h2></div>
+
+  <p>Salah satu aspek MELISA yang paling kuat dan sering disalahpahami adalah kemampuan multi-distribusi Linux-nya. Berbeda dengan banyak dokumentasi awal yang menyebut hanya Fedora, analisis mendalam terhadap modul <code>src/distros/host_distro.rs</code> mengungkapkan bahwa MELISA telah membangun infrastruktur deteksi dan adaptasi distro yang cukup lengkap — mencakup seluruh keluarga besar Linux.</p>
+
+  <h3>Mekanisme Deteksi Host OS</h3>
+  <p>MELISA mendeteksi sistem operasi host secara runtime dengan membaca file standar <code>/etc/os-release</code> secara asinkron menggunakan <code>tokio::fs</code>. Pendekatan ini adalah cara yang benar dan paling kompatibel karena file <code>/etc/os-release</code> adalah standar FreeDesktop.org yang diimplementasikan di hampir seluruh distro Linux modern.</p>
+
+  <div class="code">
+<span class="cm">// host_distro.rs — Deteksi OS via /etc/os-release</span>
+<span class="kw">pub async fn</span> <span class="fn">detect_host_distro</span>() -> <span class="tp">HostDistro</span> {
+    <span class="kw">let</span> content = fs::<span class="fn">read_to_string</span>(<span class="str">"/etc/os-release"</span>)
+        .<span class="kw">await</span>
+        .<span class="fn">unwrap_or_default</span>()
+        .<span class="fn">to_lowercase</span>();  <span class="cm">// Case-insensitive matching</span>
+
+    <span class="kw">if</span> content.<span class="fn">contains</span>(<span class="str">"fedora"</span>) || content.<span class="fn">contains</span>(<span class="str">"rhel"</span>) 
+        || content.<span class="fn">contains</span>(<span class="str">"centos"</span>) || content.<span class="fn">contains</span>(<span class="str">"rocky"</span>) {
+        <span class="tp">HostDistro</span>::Fedora  <span class="cm">// RHEL family: dnf + firewalld</span>
+    } <span class="kw">else if</span> content.<span class="fn">contains</span>(<span class="str">"ubuntu"</span>) {
+        <span class="tp">HostDistro</span>::Ubuntu  <span class="cm">// Ubuntu: apt-get + ufw</span>
+    } <span class="kw">else if</span> content.<span class="fn">contains</span>(<span class="str">"debian"</span>) {
+        <span class="tp">HostDistro</span>::Debian  <span class="cm">// Debian: apt-get + ufw</span>
+    } <span class="kw">else if</span> content.<span class="fn">contains</span>(<span class="str">"arch"</span>) {
+        <span class="tp">HostDistro</span>::Arch    <span class="cm">// Arch Linux: pacman + iptables</span>
+    } <span class="kw">else</span> {
+        <span class="cm">// Fallback: Ekstrak ID dari os-release untuk logging</span>
+        <span class="tp">HostDistro</span>::Unknown(id) <span class="cm">// Default ke apt-get/ufw/ssh</span>
+    }
+}
+  </div>
+
+  <h3>Matrix Dukungan Distro Lengkap</h3>
+  <table class="dtable">
+    <tr>
+      <th>Distribusi / Keluarga</th>
+      <th>Package Manager</th>
+      <th>Paket LXC</th>
+      <th>SSH Service</th>
+      <th>Firewall</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td><strong>Fedora 36+</strong></td>
+      <td><code>dnf</code></td>
+      <td><code>lxc lxc-templates libvirt bridge-utils</code></td>
+      <td><code>sshd</code></td>
+      <td><code>firewalld</code></td>
+      <td><span class="tag win">✓ Full Support</span></td>
+    </tr>
+    <tr>
+      <td><strong>RHEL 8/9</strong><br><small style="color:var(--muted2)">termasuk AlmaLinux, Rocky Linux, CentOS Stream</small></td>
+      <td><code>dnf</code></td>
+      <td><code>lxc lxc-templates libvirt bridge-utils</code></td>
+      <td><code>sshd</code></td>
+      <td><code>firewalld</code></td>
+      <td><span class="tag win">✓ Full Support</span></td>
+    </tr>
+    <tr>
+      <td><strong>Ubuntu 20.04+</strong><br><small style="color:var(--muted2)">LTS series</small></td>
+      <td><code>apt-get</code></td>
+      <td><code>lxc lxc-utils bridge-utils</code></td>
+      <td><code>ssh</code> (bukan sshd)</td>
+      <td><code>ufw</code></td>
+      <td><span class="tag win">✓ Full Support</span></td>
+    </tr>
+    <tr>
+      <td><strong>Debian 11/12</strong><br><small style="color:var(--muted2)">Bullseye / Bookworm</small></td>
+      <td><code>apt-get</code></td>
+      <td><code>lxc lxc-utils bridge-utils</code></td>
+      <td><code>ssh</code></td>
+      <td><code>ufw</code></td>
+      <td><span class="tag win">✓ Full Support</span></td>
+    </tr>
+    <tr>
+      <td><strong>Arch Linux</strong><br><small style="color:var(--muted2)">Rolling release</small></td>
+      <td><code>pacman</code></td>
+      <td><code>lxc bridge-utils</code></td>
+      <td><code>sshd</code></td>
+      <td><code>iptables</code></td>
+      <td><span class="tag win">✓ Full Support</span></td>
+    </tr>
+    <tr>
+      <td><strong>Manjaro / EndeavourOS</strong><br><small style="color:var(--muted2)">Arch-based</small></td>
+      <td><code>pacman</code></td>
+      <td><code>lxc bridge-utils</code></td>
+      <td><code>sshd</code></td>
+      <td><code>iptables</code></td>
+      <td><span class="tag win">✓ Via Arch Profile</span></td>
+    </tr>
+    <tr>
+      <td><strong>Linux Mint / Pop!_OS</strong><br><small style="color:var(--muted2)">Ubuntu-based</small></td>
+      <td><code>apt-get</code></td>
+      <td><code>lxc lxc-utils bridge-utils</code></td>
+      <td><code>ssh</code></td>
+      <td><code>ufw</code></td>
+      <td><span class="tag win">✓ Via Ubuntu Profile</span></td>
+    </tr>
+    <tr>
+      <td><strong>Kali Linux / Parrot OS</strong><br><small style="color:var(--muted2)">Debian-based</small></td>
+      <td><code>apt-get</code></td>
+      <td><code>lxc lxc-utils bridge-utils</code></td>
+      <td><code>ssh</code></td>
+      <td><code>ufw</code></td>
+      <td><span class="tag win">✓ Via Debian Profile</span></td>
+    </tr>
+    <tr>
+      <td><strong>OpenSUSE / SLES</strong></td>
+      <td><code>apt-get</code> (fallback)</td>
+      <td>Default minimal</td>
+      <td><code>ssh</code></td>
+      <td><code>ufw</code></td>
+      <td><span class="tag warn">⚠ Partial (Unknown fallback)</span></td>
+    </tr>
+    <tr>
+      <td><strong>Distro Tidak Dikenal</strong></td>
+      <td><code>apt-get</code> (fallback aman)</td>
+      <td><code>lxc lxc-utils bridge-utils</code></td>
+      <td><code>ssh</code></td>
+      <td><code>ufw</code></td>
+      <td><span class="tag warn">⚠ Safe Fallback Mode</span></td>
+    </tr>
+  </table>
+
+  <h3>Tiga Jenis Firewall yang Didukung</h3>
+  <p>Salah satu detail teknis yang sangat penting adalah bahwa MELISA tidak hanya mendukung satu sistem firewall — ia mendukung tiga yang paling umum digunakan di Linux, dan memilih secara otomatis berdasarkan distro yang terdeteksi:</p>
+
+  <div class="code">
+<span class="cm">// Firewall abstraction — host_distro.rs</span>
+<span class="kw">pub enum</span> <span class="tp">FirewallKind</span> {
+    Firewalld, <span class="cm">// RHEL/Fedora — menggunakan zone "trusted" untuk lxcbr0</span>
+    Ufw,       <span class="cm">// Ubuntu/Debian — mengizinkan traffic masuk di lxcbr0</span>
+    Iptables,  <span class="cm">// Arch/minimal — menambahkan rule ACCEPT di chain INPUT</span>
+}
+
+<span class="cm">// Contoh eksekusi untuk Firewalld:</span>
+firewall-cmd --zone=trusted --add-interface=lxcbr0 --permanent
+firewall-cmd --reload
+
+<span class="cm">// Contoh eksekusi untuk UFW:</span>
+ufw allow in on lxcbr0
+ufw reload
+
+<span class="cm">// Contoh eksekusi untuk iptables:</span>
+iptables -I INPUT -i lxcbr0 -j ACCEPT
+  </div>
+
+  <h3>Package Manager Kontainer (di dalam Container)</h3>
+  <p>Selain package manager host, MELISA juga mengenal package manager dari berbagai distribusi yang bisa berjalan <em>di dalam</em> container. Saat container dibuat, MELISA secara otomatis menjalankan update awal menggunakan package manager yang tepat:</p>
+
+  <table class="dtable">
+    <tr>
+      <th>Distro Container</th>
+      <th>Package Manager</th>
+      <th>Update Command</th>
+    </tr>
+    <tr><td>Debian / Ubuntu / Kali</td><td><code>apt</code></td><td><code>apt-get update -y</code></td></tr>
+    <tr><td>Fedora / CentOS / Rocky / AlmaLinux</td><td><code>dnf</code></td><td><code>dnf makecache</code></td></tr>
+    <tr><td>Alpine Linux</td><td><code>apk</code></td><td><code>apk update</code></td></tr>
+    <tr><td>Arch Linux</td><td><code>pacman</code></td><td><code>pacman -Sy --noconfirm</code></td></tr>
+    <tr><td>OpenSUSE</td><td><code>zypper</code></td><td><code>zypper --non-interactive refresh</code></td></tr>
+  </table>
+
+  <div class="hbox green">
+    <h4>🌐 Distro Container vs Distro Host — Bebas Kombinasi</h4>
+    <p>Ini adalah keunggulan penting: distro host dan distro container bisa berbeda sepenuhnya. Anda bisa menjalankan MELISA di server Fedora, namun membuat container Ubuntu, Alpine, Arch, atau bahkan Kali Linux di dalamnya — semua berjalan secara bersamaan. Inilah mengapa MELISA sangat fleksibel untuk testing lintas-distro.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 4 ══════════════════════════ -->
+<div class="sec" id="s4">
+  <div class="sec-hd"><div class="sec-num">4</div><h2>Alur Kerja Lengkap — Fase per Fase</h2></div>
+
+  <p>MELISA memiliki tiga fase operasional yang berbeda dalam siklus hidupnya. Memahami ketiga fase ini adalah kunci untuk memahami mengapa MELISA dirancang seperti yang ada sekarang.</p>
+
+  <h3>Fase 0: Compilation (Build dari Source)</h3>
+  <div class="flow">
+    <div class="flow-label">Fase 0 — Dari Source ke Binary</div>
+    <div class="flow-row">
+      <div class="fb">git clone repository</div>
+      <div class="arr">→</div>
+      <div class="fb b">cargo build</div>
+      <div class="arr">→</div>
+      <div class="fb r">./target/debug/melisa binary</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb r">sudo -E ./target/debug/melisa</div>
+      <div class="arr">→</div>
+      <div class="fb y">check: bukan via SSH?</div>
+      <div class="arr">→</div>
+      <div class="fb g">tampilkan banner</div>
+    </div>
+  </div>
+
+  <h3>Fase 1: The Physical Handshake — Inisialisasi Satu Kali</h3>
+  <p>Inisialisasi MELISA adalah operasi "sekali seumur hidup" yang dirancang untuk dijalankan secara fisik di terminal host. Ini adalah mekanisme keamanan yang disebut <em>Physical Handshake</em>.</p>
+  <div class="flow">
+    <div class="flow-label">Fase 1 — --setup (Physical Handshake)</div>
+    <div class="flow-row">
+      <div class="fb r">Cek: bukan SSH session</div>
+      <div class="arr">→</div>
+      <div class="fb r">Cek: root/sudo privileges</div>
+      <div class="arr">→</div>
+      <div class="fb b">detect_host_distro()</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb b">get_distro_config()</div>
+      <div class="arr">→</div>
+      <div class="fb">System update (dnf/apt/pacman)</div>
+      <div class="arr">→</div>
+      <div class="fb">Install LXC + bridge-utils + ssh</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb y">Load kernel module veth</div>
+      <div class="arr">→</div>
+      <div class="fb y">Configure lxcbr0 bridge</div>
+      <div class="arr">→</div>
+      <div class="fb y">Start lxc-net.service + sshd</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb g">Deploy binary → /usr/local/bin/melisa</div>
+      <div class="arr">→</div>
+      <div class="fb g">chmod 4755 (SUID bit)</div>
+      <div class="arr">→</div>
+      <div class="fb g">Register di /etc/shells</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb">Setup firewall (firewalld/ufw/iptables)</div>
+      <div class="arr">→</div>
+      <div class="fb">Create /opt/melisa/projects (1777)</div>
+      <div class="arr">→</div>
+      <div class="fb">usermod --add-subuids</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb r">chmod 711 /home (anti-enumeration)</div>
+      <div class="arr">→</div>
+      <div class="fb r">Deploy /etc/sudoers.d/melisa (0440)</div>
+      <div class="arr">→</div>
+      <div class="fb g">✓ HOST READY</div>
+    </div>
+  </div>
+
+  <h3>Fase 2: Operasi Sehari-hari (Interactive REPL)</h3>
+  <div class="flow">
+    <div class="flow-label">Fase 2 — Sesi REPL Interaktif</div>
+    <div class="flow-row">
+      <div class="fb r">check_root()</div>
+      <div class="arr">→</div>
+      <div class="fb">display_melisa_banner() [sysinfo telemetry]</div>
+      <div class="arr">→</div>
+      <div class="fb b">rustyline::Editor::new()</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb b">load ~/.local/share/melisa/history.txt</div>
+      <div class="arr">→</div>
+      <div class="fb">loop: readline(prompt)</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="arr">▼ input</div>
+      <div class="fb">execute_command(&amp;input)</div>
+      <div class="arr">→</div>
+      <div class="fb r">ExecResult::Continue / Break / Error</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="arr">▼</div>
+      <div class="fb">append_history() [disk I/O minimal]</div>
+      <div class="arr">→</div>
+      <div class="fb">next iteration</div>
+    </div>
+  </div>
+
+  <h3>Fase 3: Siklus Hidup Container</h3>
+  <div class="flow">
+    <div class="flow-label">Fase 3 — Container Lifecycle</div>
+    <div class="flow-row">
+      <div class="fb b">--distros (fetch + cache list)</div>
+      <div class="arr">→</div>
+      <div class="fb b">--create mycontainer</div>
+      <div class="arr">→</div>
+      <div class="fb">lxc-create -t download [TUI selector]</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb">inject_network_config() [veth+lxcbr0]</div>
+      <div class="arr">→</div>
+      <div class="fb">setup_container_dns() [chattr +i]</div>
+      <div class="arr">→</div>
+      <div class="fb">auto_initial_setup() [pkg update]</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb g">--run mycontainer [lxc-start -d]</div>
+      <div class="arr">→</div>
+      <div class="fb g">--enter mycontainer [lxc-attach bash]</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb y">--send mycontainer cmd [lxc-attach exec]</div>
+      <div class="arr">→</div>
+      <div class="fb y">--upload mycontainer /dest [tar stream]</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb r">--stop mycontainer [lxc-stop graceful]</div>
+      <div class="arr">→</div>
+      <div class="fb r">--delete [unlock DNS → cleanup → lxc-destroy]</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 5 ══════════════════════════ -->
+<div class="sec" id="s5">
+  <div class="sec-hd"><div class="sec-num">5</div><h2>Panduan Instalasi Server (Host) — Step by Step</h2></div>
+
+  <p>Berikut adalah panduan instalasi lengkap MELISA di sisi server dengan penjelasan detail mengapa setiap langkah diperlukan.</p>
+
+  <h3>Prasyarat Sistem</h3>
+  <div class="cards">
+    <div class="card">
+      <span class="card-icon">🖥️</span>
+      <h4>Sistem Operasi</h4>
+      <p>Fedora, RHEL, CentOS, Rocky, AlmaLinux, Ubuntu (20.04+), Debian (11+), atau Arch Linux. Distro lain akan menggunakan fallback apt-get.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🖥️</span>
+      <h4>Akses Fisik / Konsol</h4>
+      <p>Setup WAJIB dijalankan dari terminal fisik atau console lokal — <strong>bukan SSH</strong>. Ini adalah keputusan keamanan, bukan keterbatasan teknis.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🌐</span>
+      <h4>Koneksi Internet</h4>
+      <p>Diperlukan untuk mengunduh paket LXC, template container, dan update sistem. Setup tidak bisa berjalan di lingkungan air-gapped tanpa konfigurasi repo lokal terlebih dahulu.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">🔑</span>
+      <h4>Sudo / Root Access</h4>
+      <p>User yang menjalankan setup harus memiliki akses sudo atau root. Setup menggunakan <code>sudo -E</code> untuk mempertahankan environment variables selama eskalasi privilege.</p>
+    </div>
+  </div>
+
+  <h3>Langkah 1 — Instalasi Rust dan Kompilasi</h3>
+  <div class="code bash">
+<span class="cm"># Install Rust via rustup (jika belum ada)</span>
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+<span class="cm"># Clone repository MELISA</span>
+git clone https://github.com/ernoba/melisa-on-saferoom-project.git
+cd melisa-on-saferoom-project
+
+<span class="cm"># Kompilasi (mode debug untuk setup awal)</span>
+cargo build
+
+<span class="cm"># Jalankan dengan sudo -E (preserves SUDO_USER env variable)</span>
+sudo -E ./target/debug/melisa
+  </div>
+
+  <h3>Langkah 2 — Banner Startup & Verifikasi</h3>
+  <p>Setelah dijalankan pertama kali sebagai root/sudo, MELISA menampilkan banner sistem yang memuat informasi telemetry realtime dari server:</p>
+  <div class="code shell">
+███╗   ███╗███████╗██║     ██║███████╗███████╗
+████╗ ████║██╔════╝██║     ██║██╔════╝██╔══██╗
+██╔████╔██║█████╗  ██║     ██║███████╗███████║
+██║╚██╔╝██║██╔══╝  ██║     ██║╚════██║██╔══██║
+██║ ╚═╝ ██║███████╗███████╗██║███████║██║  ██║
+╚═╝     ╚═╝╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝
+    [ MANAGEMENT ENVIRONMENT LINUX SANDBOX ]
+
+┌─── SYSTEM TELEMETRY &amp; STATUS ────────────────────────────────────┐
+│ TIMESTAMP  :: 2026-03-26 10:00:00
+│ KERNEL_ID  :: FEDORA LINUX
+│ HOST_NODE  :: your-hostname
+│ PROCESSOR  :: AMD Ryzen 7 7435HS
+│ GPU_STATUS :: NVIDIA Corporation GA107 (rev a1)
+│ RAM_USAGE  :: 5878MB / 15794MB (37%)
+│ ------------------------------------------------------------------
+│ PROTOCOL   :: SECURE ISOLATION ACTIVE
+│ DIRECTIVE  :: MAXIMUM PERFORMANCE // ZERO INEFFICIENCY
+└────────────────────────────────────────────────────────────────────┘
+
+>>> ALL SYSTEMS OPERATIONAL. SECURE SESSION GRANTED.
+  </div>
+
+  <h3>Langkah 3 — Menjalankan --setup</h3>
+  <div class="code bash">
+<span class="cm"># Di dalam REPL MELISA, jalankan:</span>
+melisa@saferoom:../saferoom> melisa --setup
+  </div>
+  <p>Perintah ini menjalankan wizard inisialisasi lengkap. Berikut detail setiap sub-operasi yang dilakukan:</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h5>System Update</h5>
+        <p>Menjalankan update package manager (<code>dnf update -y</code> / <code>apt-get update</code> / <code>pacman -Sy</code>) untuk memastikan semua paket terbaru tersedia.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h5>Instalasi Dependensi LXC</h5>
+        <p>Menginstal paket <code>lxc</code>, <code>lxc-templates</code> (atau <code>lxc-utils</code>), <code>libvirt</code>, <code>bridge-utils</code>, paket SSH server, dan <code>firewalld</code> / <code>ufw</code> sesuai distro.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h5>Konfigurasi Jaringan</h5>
+        <p>Memuat kernel module <code>veth</code>, mengaktifkan dan memulai <code>lxc-net.service</code> yang membuat bridge <code>lxcbr0</code> (biasanya di subnet 10.0.3.0/24).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h5>Konfigurasi Firewall</h5>
+        <p>Mengotorisasi port SSH (22/tcp) dan mengizinkan seluruh traffic melalui interface <code>lxcbr0</code> di zone trusted (firewalld), atau via allow rule di UFW/iptables.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h5>Deploy Binary MELISA</h5>
+        <p>Menyalin binary hasil kompilasi ke <code>/usr/local/bin/melisa</code> dan menerapkan SUID bit (<code>chmod 4755</code>). Ini memungkinkan pengguna non-root menjalankan MELISA dengan eskalasi privilege terkontrol.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h5>Register Jail Shell</h5>
+        <p>Mendaftarkan <code>/usr/local/bin/melisa</code> ke <code>/etc/shells</code>. Ini diperlukan agar sistem mengizinkan penggunaan MELISA sebagai login shell pengguna.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h5>Infrastruktur Proyek</h5>
+        <p>Membuat direktori <code>/opt/melisa/projects</code> dengan Sticky Bit <code>1777</code> — sehingga semua pengguna bisa membuat direktori di dalamnya, tapi hanya pemilik yang bisa menghapus direktori miliknya.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <h5>User Namespace Mapping</h5>
+        <p>Mengonfigurasi <code>subuid</code> dan <code>subgid</code> range (<code>100000-165535</code>) untuk pengguna yang sedang melakukan setup. Ini adalah prasyarat untuk container yang berjalan dalam unprivileged mode.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <h5>Pengerasan Keamanan</h5>
+        <p>Menerapkan <code>chmod 711 /home</code> untuk mencegah enumerasi pengguna, mengkonfigurasi Git global safe.directory, dan memperbaiki permissions pada <code>newuidmap</code>/<code>newgidmap</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h5>Sudoers Global</h5>
+        <p>Membuat <code>/etc/sudoers.d/melisa</code> dengan rule <code>ALL ALL=(ALL) NOPASSWD: /usr/local/bin/melisa</code> bererizin 0440, memungkinkan semua pengguna menjalankan MELISA tanpa password sudo.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Langkah 4 — Verifikasi</h3>
+  <div class="code bash">
+<span class="cm"># Setelah setup, verifikasi dengan:</span>
+melisa@saferoom:../saferoom> melisa --list
+<span class="cm"># Output: Daftar kosong (normal — belum ada container)</span>
+<span class="cm"># Jika tidak ada error, setup berhasil!</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 6 ══════════════════════════ -->
+<div class="sec" id="s6">
+  <div class="sec-hd"><div class="sec-num">6</div><h2>Panduan Instalasi Klien (Remote) — Step by Step</h2></div>
+
+  <p>Klien MELISA adalah script Bash ringan yang bisa diinstal di laptop, desktop, atau workstation manapun yang memiliki SSH client. Tidak ada dependensi binary tambahan selain Bash dan SSH standar.</p>
+
+  <h3>Langkah 1 — Menjalankan Installer</h3>
+  <div class="code bash">
+<span class="cm"># Masuk ke direktori client dalam repository</span>
+cd melisa-on-saferoom-project/src/melisa_client
+
+<span class="cm"># Jalankan installer</span>
+./install.sh
+  </div>
+  <p>Installer akan melakukan hal-hal berikut secara otomatis:</p>
+  <ul>
+    <li>Membuat <code>~/.local/bin/</code> dan <code>~/.local/share/melisa/</code></li>
+    <li>Menyalin binary <code>melisa</code> ke <code>~/.local/bin/melisa</code></li>
+    <li>Menyalin semua modul (<code>auth.sh</code>, <code>exec.sh</code>, <code>utils.sh</code>) ke <code>~/.local/share/melisa/</code></li>
+    <li>Menambahkan <code>~/.local/bin</code> ke PATH di <code>~/.bashrc</code>, <code>~/.zshrc</code>, atau <code>~/.profile</code> sesuai shell aktif</li>
+    <li>Memperbaiki permission ownership jika sebelumnya direktori dikunci oleh root</li>
+  </ul>
+
+  <div class="code bash">
+<span class="cm"># Setelah instalasi, reload shell</span>
+source ~/.bashrc   <span class="cm"># atau source ~/.zshrc</span>
+
+<span class="cm"># Verifikasi instalasi</span>
+melisa
+<span class="cm"># Akan menampilkan help menu jika berhasil</span>
+  </div>
+
+  <h3>Langkah 2 — Menambahkan Profil Server</h3>
+  <div class="code bash">
+<span class="cm"># Format: melisa auth add [nama-profil] [user@ip-server]</span>
+melisa auth add myserver root@192.168.1.100
+
+<span class="cm"># Apa yang terjadi di balik layar:</span>
+<span class="cm"># 1. Cek SSH key di ~/.ssh/id_ed25519 atau ~/.ssh/id_rsa</span>
+<span class="cm"># 2. Jika tidak ada → buat Ed25519 keypair otomatis</span>
+<span class="cm"># 3. ssh-copy-id root@192.168.1.100 (prompt password sekali)</span>
+<span class="cm"># 4. Tambahkan SSH ControlMaster config ke ~/.ssh/config</span>
+<span class="cm"># 5. Simpan profil di ~/.config/melisa/profiles.conf</span>
+<span class="cm"># 6. Set profil ini sebagai active</span>
+  </div>
+
+  <h3>Konfigurasi SSH ControlMaster (Diinjeksi Otomatis)</h3>
+  <p>Ini adalah detail teknis yang penting — MELISA secara otomatis mengkonfigurasi SSH multiplexing di <code>~/.ssh/config</code>:</p>
+  <div class="code">
+<span class="cm"># ~/.ssh/config — diinjeksi oleh melisa auth add</span>
+Host 192.168.1.100
+    User root
+    ControlMaster auto
+    ControlPath ~/.ssh/sockets/%r@%h:%p
+    ControlPersist 10m
+  </div>
+  <p>ControlMaster berarti SSH membuka satu koneksi master dan semua perintah selanjutnya menggunakan socket yang sama — menghemat waktu handshake SSL yang biasanya 200-500ms per perintah. Dengan ControlPersist 10 menit, koneksi tetap hidup selama 10 menit setelah perintah terakhir.</p>
+
+  <h3>Manajemen Multi-Server</h3>
+  <div class="code bash">
+<span class="cm"># Tambah server kedua</span>
+melisa auth add prodserver admin@203.0.113.50
+
+<span class="cm"># Lihat semua server terdaftar</span>
+melisa auth list
+<span class="cm"># Output:</span>
+<span class="cm">#   * myserver    (root@192.168.1.100) &lt;- [ACTIVE]</span>
+<span class="cm">#     prodserver  (admin@203.0.113.50)</span>
+
+<span class="cm"># Ganti server aktif</span>
+melisa auth switch prodserver
+
+<span class="cm"># Hapus profil</span>
+melisa auth remove myserver
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 7 ══════════════════════════ -->
+<div class="sec" id="s7">
+  <div class="sec-hd"><div class="sec-num">7</div><h2>Referensi Perintah CLI Lengkap</h2></div>
+
+  <p>Berikut adalah dokumentasi lengkap semua perintah yang tersedia di MELISA, baik di sisi server (Rust binary) maupun klien (Bash script), beserta penjelasan teknikal mendalam tentang cara kerja setiap perintah.</p>
+
+  <h3>Perintah Sistem & Setup</h3>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --setup</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menjalankan wizard inisialisasi host lengkap. Hanya bisa dijalankan dari terminal fisik (bukan SSH) dan memerlukan root/sudo. Operasi one-time yang menginstal semua dependensi, mengkonfigurasi jaringan, mendeploy binary, dan mengeras sistem keamanan.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --setup</div>
+        <div class="cmd-notes">⚠ Akan gagal jika dijalankan via SSH — ini disengaja sebagai mekanisme keamanan.</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --help</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan menu bantuan lengkap dengan daftar semua perintah yang tersedia, dikelompokkan berdasarkan kategori fungsional.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --help</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Perintah Manajemen Container</h3>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --distros</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan daftar distribusi Linux yang tersedia untuk dibuat sebagai container. Menggunakan sistem caching concurrent — jika cache masih segar (&lt;1 jam), data diambil dari cache. Jika tidak, mengeksekusi <code>lxc-download --list</code> dan menyimpan hasilnya.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --distros</div>
+        <div class="cmd-notes">Cache disimpan di /tmp/melisa_global_distros.cache. Lock file di /tmp/melisa_distro.lock mencegah race condition jika banyak user memanggil sekaligus.</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --create &lt;nama&gt;</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Membuat container baru dengan nama yang ditentukan. Menampilkan TUI (Text User Interface) interaktif untuk memilih distribusi dari daftar yang tersedia. Setelah container dibuat, secara otomatis menginjeksi konfigurasi jaringan, mengunci DNS, dan menjalankan update package awal.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --create myubuntu</div>
+        <div class="cmd-notes">Proses ini bisa memakan waktu 2-10 menit tergantung kecepatan internet (mengunduh template distribusi ~100-300MB). Progress ditampilkan dengan spinner animasi.</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --list</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan daftar semua container yang ada di sistem beserta status (Running/Stopped), distribusi, arsitektur, dan informasi dasar lainnya.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --list</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --active</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan hanya container yang sedang berjalan (status RUNNING). Versi filter dari --list.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --active</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --info &lt;nama&gt;</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan informasi detail sebuah container: distribusi, arsitektur, variant, package manager, UUID, dan status saat ini. Data diambil dari file metadata <code>/etc/melisa-info</code> di dalam rootfs container.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --info myubuntu</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --run &lt;nama&gt;</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Memulai container dalam mode daemon (<code>lxc-start -d</code>). Container berjalan di background tanpa menempati terminal. Pastikan container sudah dibuat sebelumnya dengan --create.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --run myubuntu</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --enter &lt;nama&gt;</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Masuk ke dalam container secara interaktif dengan melampirkan terminal host ke bash session container (<code>lxc-attach --</code>). Ketik <code>exit</code> untuk kembali ke MELISA host.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --enter myubuntu
+<span class="cm"># Setelah ini Anda berada di dalam container</span>
+root@myubuntu:/# apt install python3
+root@myubuntu:/# exit
+melisa@saferoom>  <span class="cm"># kembali ke host</span></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --send &lt;nama&gt; &lt;cmd&gt; [args]</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengirim dan mengeksekusi perintah langsung ke container yang sedang berjalan tanpa masuk secara interaktif. Menggunakan <code>lxc-attach</code> untuk melewatkan perintah ke dalam container. Sangat berguna untuk otomasi dan scripting.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --send myubuntu bash -c "apt update &amp;&amp; apt install -y nginx"
+melisa@saferoom> melisa --send myubuntu python3 /tmp/script.py</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --upload &lt;nama&gt; &lt;dest&gt;</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menerima stream tar dari stdin dan mengekstraknya ke path tujuan di dalam container yang berjalan. Biasanya dipanggil oleh klien Bash via pipeline SSH — tidak dimaksudkan untuk penggunaan manual langsung.</div>
+        <div class="cmd-usage"><span class="cm"># Dari klien:</span>
+tar -czf - -C ~/myproject . | ssh server "melisa --upload mycontainer /app"</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --stop &lt;nama&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menghentikan container secara graceful menggunakan <code>lxc-stop</code>. Memberikan waktu pada proses di dalam container untuk bersih sebelum dihentikan paksa.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --stop myubuntu</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --delete &lt;nama&gt;</span><span class="cmd-role user">Regular User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menghapus container secara permanen. MELISA melakukan serangkaian operasi keamanan sebelum penghapusan: memeriksa apakah container sedang berjalan (jika ya, menghentikannya dulu), membuka kunci DNS (chattr -i), membersihkan metadata MELISA, baru kemudian memanggil <code>lxc-destroy -f</code>.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --delete myubuntu</div>
+        <div class="cmd-notes">⚠ Permanen dan tidak bisa dibatalkan. Seluruh data di dalam container akan hilang.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Perintah Manajemen Pengguna</h3>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --add &lt;username&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Membuat akun pengguna MELISA baru. Akan muncul prompt interaktif untuk memilih peran (Admin atau Regular). Secara otomatis membuat user sistem Linux dengan shell MELISA, mengatur direktori home dengan izin 700, meminta set password, dan mendeploy file sudoers spesifik pengguna tersebut.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --add alice
+<span class="cm">Select Access Level for alice:</span>
+<span class="cm">  1) Administrator (Full Management)</span>
+<span class="cm">  2) Standard User (Project &amp; LXC Only)</span>
+Enter choice (1/2): 2</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --passwd &lt;username&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengatur atau mengubah password pengguna MELISA. Memanggil perintah <code>passwd</code> sistem secara interaktif sehingga password tidak pernah terekspos di command line atau log.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --passwd alice</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --user</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan daftar semua pengguna MELISA yang terdaftar (pengguna yang menggunakan MELISA sebagai shell di /etc/passwd), beserta peran mereka. Juga memindai dan melaporkan file sudoers yang "orphaned" — konfigurasi yang ditinggalkan oleh akun yang sudah dihapus.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --user</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --remove &lt;username&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menghapus pengguna MELISA beserta semua data terkait: pertama mematikan semua proses milik pengguna dengan <code>pkill -u</code>, kemudian menghapus akun dengan <code>userdel -r -f</code> (termasuk home directory), dan terakhir menghapus file sudoers spesifik pengguna tersebut. Meminta konfirmasi sebelum eksekusi.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --remove alice
+Are you sure you want to permanently delete user 'alice'? (y/N): y</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --upgrade &lt;username&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengubah peran pengguna yang sudah ada (upgrade dari Regular ke Admin, atau downgrade dari Admin ke Regular). Memvalidasi keberadaan pengguna terlebih dahulu, lalu menampilkan menu pemilihan peran, dan mendeploy ulang file sudoers dengan izin baru.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --upgrade alice
+<span class="cm">Select Target Role for alice:</span>
+<span class="cm">  1) Administrator (Full Access)</span>
+<span class="cm">  2) Standard User (LXC &amp; Project Only)</span>
+Enter choice (1/2): 1</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --clean</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Garbage collection otomatis untuk konfigurasi sudoers yang orphaned. Memindai direktori <code>/etc/sudoers.d/</code> untuk file dengan prefix <code>melisa_</code>, lalu mencocokkannya dengan pengguna yang masih aktif. File untuk akun yang sudah tidak ada akan dihapus.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --clean</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Perintah Manajemen Proyek</h3>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --new_project &lt;nama&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Membuat proyek master baru di <code>/opt/melisa/projects/[nama]</code>. Proyek master adalah sumber kebenaran tunggal yang akan didistribusikan ke anggota tim. Hanya admin yang bisa membuat proyek baru untuk menjaga keteraturan.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --new_project webapi-v2</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --projects</span><span class="cmd-role all">Semua User</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menampilkan daftar semua proyek yang tersedia — baik proyek master di <code>/opt/melisa/projects/</code> maupun proyek yang terdapat di home directory pengguna saat ini.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --projects</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --invite &lt;project&gt; &lt;user1&gt; [user2...]</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengundang satu atau lebih pengguna ke sebuah proyek. MELISA akan membuat salinan proyek di home directory setiap pengguna yang diundang, dengan izin yang sesuai. Bisa mengundang banyak user sekaligus dalam satu perintah.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --invite webapi-v2 alice bob charlie</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --update &lt;project&gt; [--force]</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mendorong pembaruan dari master project ke workspace pengguna tertentu. Flag <code>--force</code> akan menimpa perubahan lokal pengguna. Mendukung format <code>--update [user] [project]</code> atau <code>--update [project]</code> (untuk user saat ini).</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --update webapi-v2
+melisa@saferoom> melisa --update alice webapi-v2 --force</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --update-all &lt;project&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Versi broadcast dari --update. Mendorong pembaruan dari master project ke workspace SEMUA pengguna yang terdaftar dalam proyek tersebut dalam satu perintah.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --update-all webapi-v2</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --pull &lt;project&gt; &lt;from_user&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menarik perubahan dari workspace seorang pengguna ke master project. Mirip dengan operasi <code>git pull</code> namun di tingkat file sistem MELISA. Berguna ketika admin ingin mengadopsi perubahan yang dilakukan user ke dalam master.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --pull webapi-v2 alice</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --out &lt;project&gt; &lt;user1&gt; [user2...]</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mencabut akses pengguna dari proyek. Menghapus salinan proyek dari home directory pengguna yang ditentukan. Bisa mencabut akses dari banyak user sekaligus.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --out webapi-v2 alice bob</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --delete_project &lt;nama&gt;</span><span class="cmd-role admin">Admin Only</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Menghapus master project beserta semua kontennya secara permanen dari <code>/opt/melisa/projects/</code>. Memvalidasi keberadaan proyek sebelum eksekusi.</div>
+        <div class="cmd-usage">melisa@saferoom> melisa --delete_project webapi-v2</div>
+        <div class="cmd-notes">⚠ Tidak menghapus salinan lokal di home directory pengguna yang sudah diundang.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Perintah Klien Remote (Bash Client)</h3>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa clone &lt;nama&gt; [--force]</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengkloning workspace proyek dari server ke mesin lokal. Tanpa <code>--force</code>, menggunakan protokol Git (<code>git clone ssh://server/opt/melisa/projects/[nama]</code>). Dengan <code>--force</code>, menggunakan Rsync untuk overwrite langsung. Secara otomatis mendaftarkan path lokal ke registry klien untuk context detection.</div>
+        <div class="cmd-usage">melisa clone webapi-v2
+melisa clone webapi-v2 --force</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa sync</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mendorong perubahan lokal ke server. Mendeteksi proyek aktif dari current working directory secara otomatis (longest-path matching). Melakukan <code>git add . &amp;&amp; git commit &amp;&amp; git push -f</code>, kemudian memicu <code>melisa --update --force</code> di server via SSH, dan menyinkronkan file <code>.env</code> via Rsync secara terpisah.</div>
+        <div class="cmd-usage">cd ~/webapi-v2
+<span class="cm"># Edit beberapa file...</span>
+melisa sync
+<span class="cm"># Otomatis commit dan push ke server</span></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa get &lt;nama&gt; [--force]</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengambil data terbaru dari server ke direktori lokal menggunakan Rsync. Tanpa <code>--force</code>, hanya mengambil file yang belum ada (--ignore-existing). Dengan <code>--force</code>, menimpa semua file.</div>
+        <div class="cmd-usage">melisa get webapi-v2
+melisa get webapi-v2 --force</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa run &lt;container&gt; &lt;file&gt;</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mengeksekusi script lokal di dalam container remote tanpa menyimpan file di server (zero-footprint). Mendeteksi interpreter otomatis dari ekstensi file (.py → python3, .js → node, lainnya → bash). Script di-stream langsung via SSH stdin ke interpreter container.</div>
+        <div class="cmd-usage">melisa run mycontainer ./test.py
+melisa run mycontainer ./deploy.sh
+melisa run mycontainer ./server.js</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa run-tty &lt;container&gt; &lt;file&gt;</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Versi interaktif dari <code>run</code>. Mengupload script ke /tmp container, mengeksekusinya dengan alokasi pseudo-TTY (-t) untuk mendukung program yang memerlukan input interaktif, kemudian membersihkan file /tmp setelah selesai.</div>
+        <div class="cmd-usage">melisa run-tty mycontainer ./interactive_setup.py
+<span class="cm"># Cocok untuk script yang memerlukan input user</span></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa upload &lt;container&gt; &lt;dir&gt; &lt;dest&gt;</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Mentransfer direktori lokal ke path tujuan di dalam container remote. Menggunakan streaming tar (<code>tar -czf - | ssh ... melisa --upload</code>) — tidak ada file temporary di server host, hanya di dalam container tujuan.</div>
+        <div class="cmd-usage">melisa upload mycontainer ./src /app/src
+melisa upload mycontainer ./config /etc/myapp</div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa shell</span><span class="cmd-role all">Client Command</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Membuka sesi SSH interaktif langsung ke MELISA host — masuk ke environment MELISA sebagai pengguna yang dikonfigurasi. Ini adalah cara tercepat untuk mengakses server secara langsung dari klien.</div>
+        <div class="cmd-usage">melisa shell
+<span class="cm"># Langsung masuk ke REPL MELISA di server</span></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-header"><span class="cmd-name">melisa --list / melisa --active</span><span class="cmd-role all">Client Forwarded</span></div>
+      <div class="cmd-body">
+        <div class="cmd-desc">Perintah yang tidak dikenali oleh klien secara otomatis diteruskan ke server MELISA via SSH. Ini berarti semua perintah server bisa dijalankan langsung dari klien tanpa perlu <code>melisa shell</code> terlebih dahulu.</div>
+        <div class="cmd-usage">melisa --list           <span class="cm"># diteruskan ke server</span>
+melisa --active         <span class="cm"># diteruskan ke server</span>
+melisa --info mycontainer <span class="cm"># diteruskan ke server</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 8 ══════════════════════════ -->
+<div class="sec" id="s8">
+  <div class="sec-hd"><div class="sec-num">8</div><h2>Sistem Manajemen Container — Analisis Teknikal Mendalam</h2></div>
+
+  <h3>LXC: Pilihan Teknologi yang Tepat</h3>
+  <p>Memilih LXC atas Docker adalah keputusan arsitektur yang sangat disengaja. LXC (Linux Containers) menggunakan kernel namespaces dan cgroups secara langsung tanpa layer daemon tambahan. Hasilnya adalah container yang lebih "transparan" — developer bisa melihat proses container di host dengan <code>ps aux</code>, resource usage langsung terbaca tanpa overhead, dan ada tidak ada "magic layer" yang menyembunyikan perilaku sistem.</p>
+
+  <h3>Alur Pembuatan Container (--create)</h3>
+  <div class="code">
+<span class="cm">// container.rs — create_container() dipanggil setelah user memilih distro dari TUI</span>
+<span class="kw">pub async fn</span> <span class="fn">create_container</span>(name: &str, distro: &<span class="tp">DistroMetadata</span>) {
+    <span class="cm">// 1. Pastikan host network siap (lxcbr0 bridge aktif)</span>
+    <span class="fn">ensure_host_network_ready</span>().<span class="kw">await</span>;
+    
+    <span class="cm">// 2. Eksekusi lxc-create via download template</span>
+    <span class="cm">//    lxc-create -P /var/lib/lxc -n [name] -t download</span>
+    <span class="cm">//    -- --dist [distro] --release [release] --arch [arch]</span>
+    <span class="fn">run_lxc_create</span>(name, distro).<span class="kw">await</span>;
+    
+    <span class="cm">// 3. Injeksi konfigurasi jaringan ke config file container</span>
+    <span class="fn">inject_network_config</span>(name).<span class="kw">await</span>;
+    
+    <span class="cm">// 4. Setup DNS statik dan kunci dengan chattr +i</span>
+    <span class="fn">setup_container_dns</span>(name).<span class="kw">await</span>;
+    
+    <span class="cm">// 5. Auto-update package repo sesuai pkg_manager distro</span>
+    <span class="fn">auto_initial_setup</span>(name, &distro.pkg_manager).<span class="kw">await</span>;
+    
+    <span class="cm">// 6. Tulis metadata MELISA ke /etc/melisa-info dalam container</span>
+    <span class="fn">write_container_metadata</span>(name, distro).<span class="kw">await</span>;
+}
+  </div>
+
+  <h3>Random MAC Address Generation</h3>
+  <p>Detail menarik: setiap container mendapat MAC address yang di-generate secara random dengan prefix tetap <code>ee:ec:fa:5e:</code>. Dua byte terakhir adalah random:</p>
+  <div class="code">
+<span class="cm">// inject_network_config() — MAC address randomization</span>
+<span class="kw">let</span> net_config = <span class="fn">format!</span>(
+    <span class="str">"lxc.net.0.hwaddr = ee:ec:fa:5e:{:02x}:{:02x}\n"</span>,
+    rand::random::&lt;<span class="tp">u8</span>&gt;(),  <span class="cm">// byte ke-5: 0x00-0xFF random</span>
+    rand::random::&lt;<span class="tp">u8</span>&gt;()   <span class="cm">// byte ke-6: 0x00-0xFF random</span>
+);
+  </div>
+  <p>Randomisasi MAC address adalah praktik keamanan penting karena mencegah fingerprinting container berdasarkan MAC address, dan juga mencegah konflik MAC di jaringan bridge jika banyak container berjalan bersamaan.</p>
+
+  <h3>Sistem Metadata Container</h3>
+  <p>Setiap container yang dibuat MELISA mendapatkan file metadata di <code>/etc/melisa-info</code> dalam format TOML. File ini menyimpan semua informasi yang diperlukan MELISA untuk mengelola container tanpa harus memanggil LXC setiap saat:</p>
+  <div class="code toml">
+<span class="cm"># /var/lib/lxc/[container]/rootfs/etc/melisa-info</span>
+name       = <span class="str">"myubuntu"</span>
+distro     = <span class="str">"ubuntu"</span>
+release    = <span class="str">"22.04"</span>
+arch       = <span class="str">"amd64"</span>
+variant    = <span class="str">"default"</span>
+pkg_manager = <span class="str">"apt"</span>
+slug       = <span class="str">"ubu-22.04-x64"</span>
+  </div>
+
+  <h3>Concurrent Distro Caching System</h3>
+  <p>Mengambil daftar distribusi LXC yang tersedia adalah operasi jaringan yang lambat (bisa 10-30 detik). MELISA mengimplementasikan sistem cache concurrent yang canggih untuk mengatasi ini:</p>
+  <div class="code">
+<span class="cm">// distro.rs — Advanced concurrent caching mechanism</span>
+<span class="kw">const</span> GLOBAL_CACHE: &str = <span class="str">"/tmp/melisa_global_distros.cache"</span>;
+<span class="kw">const</span> LOCK_FILE: &str    = <span class="str">"/tmp/melisa_distro.lock"</span>;
+<span class="kw">const</span> CACHE_EXPIRY: <span class="tp">u64</span>   = <span class="num">3600</span>; <span class="cm">// 1 jam</span>
+
+<span class="cm">// Fast Path: jika cache segar dan tidak ada lock, baca langsung</span>
+<span class="kw">if</span> cache_exists && <span class="fn">is_cache_fresh</span>(GLOBAL_CACHE).<span class="kw">await</span> && !lock_exists {
+    <span class="kw">return</span> (parse_distro_list(&content), <span class="kw">true</span>);  <span class="cm">// served from cache</span>
+}
+
+<span class="cm">// Lock prevention: max 40 retry dengan backoff</span>
+<span class="kw">while</span> lock_exists && retry_count &lt; <span class="num">40</span> {
+    sleep(<span class="tp">Duration</span>::from_millis(<span class="num">500</span>)).<span class="kw">await</span>;
+    retry_count += <span class="num">1</span>;
+}
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 9 ══════════════════════════ -->
+<div class="sec" id="s9">
+  <div class="sec-hd"><div class="sec-num">9</div><h2>Sistem Manajemen Pengguna — Jail Shell & RBAC</h2></div>
+
+  <h3>Konsep Jail Shell — Keahlian Tersembunyi</h3>
+  <p>Konsep paling inovatif di MELISA adalah penggunaan MELISA itu sendiri sebagai login shell pengguna. Ketika admin membuat pengguna baru dengan <code>melisa --add</code>, perintah yang dieksekusi adalah:</p>
+  <div class="code">
+useradd -m -s /usr/local/bin/melisa [username]
+  </div>
+  <p>Flag <code>-s /usr/local/bin/melisa</code> menetapkan MELISA sebagai shell default pengguna. Ini berarti ketika pengguna login ke server via SSH (<code>ssh alice@server</code>), shell yang diluncurkan adalah MELISA — bukan bash, bukan sh. Pengguna langsung masuk ke lingkungan MELISA, dan tidak ada cara untuk keluar ke bash host kecuali admin mengubah shell mereka.</p>
+
+  <h3>Struktur Sudoers Per-User</h3>
+  <p>Setiap pengguna MELISA mendapat file sudoers tersendiri di <code>/etc/sudoers.d/melisa_[username]</code>. Pemisahan ini fundamental karena memungkinkan revokasi akses per-user tanpa mempengaruhi pengguna lain:</p>
+  <div class="code">
+<span class="cm"># /etc/sudoers.d/melisa_alice (Regular User)</span>
+alice ALL=(ALL) NOPASSWD: /usr/bin/lxc-*, /bin/lxc-*,
+  /usr/share/lxc/templates/lxc-download *,
+  /usr/bin/git *, /usr/local/bin/melisa *,
+  /usr/bin/mkdir -p *, /usr/bin/rm -f *,
+  /usr/bin/bash -c *, /usr/bin/tee *,
+  /usr/bin/chattr *
+
+<span class="cm"># /etc/sudoers.d/melisa_bob (Administrator)</span>
+bob ALL=(ALL) NOPASSWD: [semua di atas] +
+  /usr/sbin/useradd *, /usr/sbin/userdel *,
+  /usr/bin/passwd *, /usr/bin/pkill *,
+  /usr/bin/chmod *, /usr/bin/chown *,
+  /usr/bin/rm -f /etc/sudoers.d/melisa_*,
+  /usr/bin/tee /etc/sudoers.d/melisa_*
+  </div>
+
+  <h3>Alur Penghapusan Pengguna yang Aman</h3>
+  <div class="flow">
+    <div class="flow-label">--remove [username] — Safe Deletion Sequence</div>
+    <div class="flow-row">
+      <div class="fb r">Admin check</div>
+      <div class="arr">→</div>
+      <div class="fb y">Konfirmasi (y/N)</div>
+      <div class="arr">→</div>
+      <div class="fb">pkill -u [username] (kill all processes)</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb">userdel -r -f [username] (hapus user + home)</div>
+      <div class="arr">→</div>
+      <div class="fb r">rm -f /etc/sudoers.d/melisa_[username]</div>
+      <div class="arr">→</div>
+      <div class="fb g">✓ Complete</div>
+    </div>
+  </div>
+
+  <div class="hbox rust">
+    <h4>🔑 Mengapa pkill Diperlukan Sebelum userdel?</h4>
+    <p>Tanpa mematikan proses pengguna terlebih dahulu, <code>userdel</code> akan gagal dengan error "user is currently logged in" atau "cannot remove user [username]: device busy". MELISA menangani ini secara elegan dengan <code>pkill -u [username]</code> yang mematikan SEMUA proses milik pengguna tersebut sebelum penghapusan akun dilakukan.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 10 ══════════════════════════ -->
+<div class="sec" id="s10">
+  <div class="sec-hd"><div class="sec-num">10</div><h2>Sistem Proyek & Kolaborasi Tim</h2></div>
+
+  <p>Fitur manajemen proyek MELISA adalah yang paling membedakannya dari tool container biasa. MELISA membangun workflow kolaborasi yang sepenuhnya terintegrasi — tanpa memerlukan GitHub, GitLab, atau platform eksternal lainnya untuk kolaborasi dasar.</p>
+
+  <h3>Hierarki Proyek MELISA</h3>
+  <div class="flow">
+    <div class="flow-label">Project Structure</div>
+    <div class="flow-row">
+      <div class="fb r">/opt/melisa/projects/webapi-v2/</div>
+      <div class="arr">← Master Project (Admin Only)</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="arr">↓ --invite alice bob</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb g">/home/alice/webapi-v2/</div>
+      <div class="arr">← Alice's copy (chmod 700)</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb g">/home/bob/webapi-v2/</div>
+      <div class="arr">← Bob's copy (chmod 700)</div>
+    </div>
+    <div class="flow-row flow-indent">
+      <div class="arr">↑ --pull webapi-v2 alice</div>
+      <div class="arr">↓ --update-all webapi-v2</div>
+    </div>
+    <div class="flow-row">
+      <div class="fb b">Rsync / Git sync bidirectional</div>
+    </div>
+  </div>
+
+  <h3>Sticky Bit pada Master Project Directory</h3>
+  <p>Direktori <code>/opt/melisa/projects</code> dibuat dengan Sticky Bit (permission 1777). Ini adalah pengaturan yang sama yang digunakan oleh <code>/tmp</code> di hampir semua sistem Unix. Artinya: semua pengguna bisa membuat file/direktori di dalam folder ini, tetapi HANYA pemilik yang bisa menghapus miliknya sendiri. Admin bisa menghapus apapun. Ini mencegah pengguna jahat menghapus proyek milik pengguna lain.</p>
+
+  <h3>Git-Based vs Rsync-Based Sync</h3>
+  <p>Klien MELISA menyediakan dua protokol sinkronisasi yang berbeda tergantung kebutuhan:</p>
+  <table class="dtable">
+    <tr>
+      <th>Protokol</th>
+      <th>Perintah</th>
+      <th>Mekanisme</th>
+      <th>Kapan Digunakan</th>
+    </tr>
+    <tr>
+      <td><strong>Git Clone</strong></td>
+      <td><code>melisa clone [project]</code></td>
+      <td><code>git clone ssh://server/opt/melisa/projects/[project]</code></td>
+      <td>Clone pertama kali — menjaga history commit</td>
+    </tr>
+    <tr>
+      <td><strong>Rsync Force</strong></td>
+      <td><code>melisa clone [project] --force</code></td>
+      <td><code>rsync -avz server:~/[project]/ ./[project]/</code></td>
+      <td>Overwrite total — ketika git tidak diperlukan</td>
+    </tr>
+    <tr>
+      <td><strong>Git Push</strong></td>
+      <td><code>melisa sync</code></td>
+      <td><code>git add . && git commit && git push -f</code></td>
+      <td>Mendorong perubahan lokal ke server</td>
+    </tr>
+    <tr>
+      <td><strong>Rsync Pull</strong></td>
+      <td><code>melisa get [project]</code></td>
+      <td><code>rsync -avz --ignore-existing server:~/[project]/ ./</code></td>
+      <td>Mengambil file baru tanpa menimpa yang ada</td>
+    </tr>
+  </table>
+
+  <h3>Context-Aware Project Detection</h3>
+  <p>Fitur yang sangat elegan di modul <code>db.sh</code>: klien MELISA selalu tahu proyek mana yang sedang Anda kerjakan berdasarkan current working directory, tanpa perlu mengetik nama proyek secara eksplisit:</p>
+  <div class="code bash">
+<span class="cm"># Registry lokal di ~/.config/melisa/registry</span>
+webapi-v2|/home/user/projects/webapi-v2
+mobile-app|/home/user/projects/mobile-app
+
+<span class="cm"># Ketika Anda berada di /home/user/projects/webapi-v2/src/</span>
+melisa sync  <span class="cm"># otomatis tahu ini adalah proyek "webapi-v2"</span>
+
+<span class="cm"># Algoritma: longest path match</span>
+<span class="cm"># /home/user/projects/webapi-v2/src/ MATCHES /home/user/projects/webapi-v2</span>
+<span class="cm"># Dipilih karena path terpanjang yang cocok</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 11 ══════════════════════════ -->
+<div class="sec" id="s11">
+  <div class="sec-hd"><div class="sec-num">11</div><h2>SSH Pipeline & Remote Execution Engine</h2></div>
+
+  <p>Remote execution engine MELISA menggunakan SSH bukan hanya sebagai saluran komunikasi — tetapi sebagai pipeline data yang sebenarnya. Pemahaman tentang ini adalah kunci untuk menghargai elegansi arsitektur klien MELISA.</p>
+
+  <h3>Zero-Footprint Script Execution</h3>
+  <p>Operasi <code>melisa run</code> adalah contoh terbaik. Ketika Anda menjalankan script Python lokal di container remote, tidak ada file yang pernah menyentuh filesystem server host:</p>
+  <div class="code bash">
+<span class="cm"># Apa yang terjadi saat: melisa run mycontainer ./analysis.py</span>
+
+<span class="cm"># exec.sh — pipeline yang sangat elegan</span>
+cat "./analysis.py" | ssh server "melisa --send mycontainer python3 -"
+<span class="cm">#   ├─ cat: baca file lokal → stream ke stdout</span>
+<span class="cm">#   ├─ | : pipe ke stdin SSH</span>
+<span class="cm">#   ├─ ssh server: buka koneksi ke server</span>
+<span class="cm">#   ├─ melisa --send mycontainer: server menerima command</span>
+<span class="cm">#   ├─ python3 -: '-' artinya baca dari stdin</span>
+<span class="cm">#   └─ lxc-attach -n mycontainer -- python3 -</span>
+
+<span class="cm"># PATH DATA: local file → SSH pipe → server stdin → lxc-attach stdin → python3</span>
+<span class="cm"># TIDAK ADA file yang tersimpan di mana pun!</span>
+  </div>
+
+  <h3>Tar Streaming untuk Directory Transfer</h3>
+  <div class="code bash">
+<span class="cm"># melisa upload mycontainer ./src /app</span>
+
+tar -czf - -C ./src . | ssh server "melisa --upload mycontainer /app"
+<span class="cm"># Sisi server (container.rs -- upload_to_container):</span>
+<span class="cm"># cat stdin | tar -xzf - -C /var/lib/lxc/mycontainer/rootfs/app</span>
+<span class="cm"># Seluruh direktori src/ ditransfer tanpa file temp!</span>
+  </div>
+
+  <h3>SSH Multiplexing — Performa Kritis</h3>
+  <p>Tanpa SSH multiplexing, setiap perintah MELISA dari klien akan memerlukan satu handshake SSL baru (200-500ms). Dengan ControlMaster yang dikonfigurasi oleh <code>melisa auth add</code>, semua koneksi berikutnya menggunakan socket yang sudah ada — latensi turun menjadi &lt;20ms. Ini membuat MELISA terasa "lokal" meskipun semua eksekusi terjadi di server remote.</p>
+
+  <h3>Automatic Interpreter Detection</h3>
+  <div class="code bash">
+<span class="cm"># exec.sh — dynamic interpreter resolution</span>
+local ext="${file##*.}"
+local interpreter="bash"           <span class="cm"># default</span>
+if [ "$ext" == "py" ]; then interpreter="python3"; fi
+if [ "$ext" == "js" ]; then interpreter="node"; fi
+<span class="cm"># Ekstensi lain bisa ditambahkan di sini (.rb → ruby, .php → php, dll)</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 12 ══════════════════════════ -->
+<div class="sec" id="s12">
+  <div class="sec-hd"><div class="sec-num">12</div><h2>Lapisan Keamanan Berlapis 8 Tingkat</h2></div>
+
+  <p>Model keamanan MELISA adalah implementasi <em>defense-in-depth</em> yang sangat komprehensif. Setiap lapisan dirancang untuk membatasi dampak jika lapisan sebelumnya berhasil dibobol. Ini bukan paranoia berlebihan — ini adalah desain yang tepat untuk sistem yang mengelola banyak pengguna di satu server.</p>
+
+  <div class="sec-layers">
+    <div class="sec-layer">
+      <div class="lay-num">1</div>
+      <div class="lay-body">
+        <h5>Physical Handshake — Anti-Remote Initialization <span class="badge unique">UNIK</span></h5>
+        <p>Setup awal MELISA secara eksplisit memblokir eksekusi via SSH dengan mendeteksi keberadaan environment variables <code>SSH_CLIENT</code>, <code>SSH_TTY</code>, dan <code>SSH_CONNECTION</code>. Ini mencegah skenario serangan di mana penyerang yang berhasil mendapatkan akses SSH awal mencoba menginisialisasi sistem keamanan sebelum admin membangun pertahanannya. Tidak ada tool container lain yang menerapkan kontrol ini secara native. Setelah setup selesai, semua operasi bisa dilakukan via SSH — hanya inisialisasi awal yang diblokir.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">2</div>
+      <div class="lay-body">
+        <h5>SUID Binary + Jail Shell — Controlled Privilege Escalation <span class="badge unique">UNIK</span></h5>
+        <p>Binary MELISA dipasang dengan SUID bit (4755) di <code>/usr/local/bin/melisa</code>. Setiap pengguna yang dibuat melalui MELISA menggunakan MELISA sebagai login shell mereka. Kombinasi keduanya berarti: pengguna memiliki cukup privilege untuk mengelola container mereka sendiri, namun tidak pernah mendapat akses ke bash host secara langsung. Mereka "terkunci" di dalam lingkungan MELISA yang dikontrol.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">3</div>
+      <div class="lay-body">
+        <h5>Granular Per-User Sudoers (0440) — Least Privilege Enforcement <span class="badge advanced">ADVANCED</span></h5>
+        <p>Setiap pengguna mendapat file sudoers tersendiri (<code>/etc/sudoers.d/melisa_[user]</code>) dengan permission strict 0440 (read-only oleh root dan group). Regular user hanya bisa menjalankan perintah LXC, Git, dan MELISA. Administrator mendapat izin tambahan untuk manajemen user dan system. Ketika pengguna dihapus, file sudoers mereka juga dihapus — tidak ada privilege yang tersisa.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">4</div>
+      <div class="lay-body">
+        <h5>Home Directory Isolation (chmod 711 + 700) — Anti-Enumeration <span class="badge advanced">ADVANCED</span></h5>
+        <p>Direktori <code>/home</code> di-chmod ke 711 selama setup. Ini berarti pengguna biasa tidak bisa menjalankan <code>ls /home</code> untuk melihat daftar pengguna lain (execute tanpa read permission pada direktori). Ditambah dengan <code>chmod 700</code> pada setiap folder pengguna individu, ini menciptakan isolasi lengkap antar pengguna — tidak ada yang bisa melihat atau mengakses file orang lain.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">5</div>
+      <div class="lay-body">
+        <h5>Immutable DNS Lock (chattr +i) — Anti-DNS Hijacking <span class="badge unique">UNIK</span></h5>
+        <p>Setelah container dibuat, file <code>/etc/resolv.conf</code> di dalam rootfs container dikunci dengan atribut immutable menggunakan <code>chattr +i</code>. Tidak ada proses di dalam container — termasuk root sekalipun — yang bisa memodifikasi atau menghapus file ini tanpa terlebih dahulu menghapus atribut immutable dari luar container. MELISA secara otomatis membuka kunci ini (<code>chattr -i</code>) saat container akan dihapus.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">6</div>
+      <div class="lay-body">
+        <h5>User Namespace Mapping (subUID/subGID 100000-165535) — Container Privilege Containment <span class="badge advanced">ADVANCED</span></h5>
+        <p>MELISA mengkonfigurasi subordinate UID/GID mapping untuk setiap pengguna. Container berjalan dalam "unprivileged mode" — root (UID 0) di dalam container di-map ke UID 100000 di host. Jika terjadi container escape, penyerang hanya mendapat privileges user biasa (UID 100000) di host — bukan root. Ini adalah lapisan mitigasi container escape yang fundamental.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">7</div>
+      <div class="lay-body">
+        <h5>Orphaned Config Garbage Collection — Configuration Hygiene <span class="badge standard">GOOD PRACTICE</span></h5>
+        <p>MELISA secara aktif memindai dan membersihkan "orphaned" sudoers files — konfigurasi yang ditinggalkan oleh akun yang sudah dihapus secara manual. Sudoers orphan adalah vektor keamanan yang sering diabaikan: jika akun dengan nama yang sama dibuat ulang di masa depan, mereka bisa mendapat privilege dari konfigurasi lama yang seharusnya sudah tidak berlaku.</p>
+      </div>
+    </div>
+    <div class="sec-layer">
+      <div class="lay-num">8</div>
+      <div class="lay-body">
+        <h5>SSH Key-Based Auth + Ed25519 + ControlMaster — Secure Remote Channel <span class="badge advanced">ADVANCED</span></h5>
+        <p>Klien MELISA menghasilkan keypair Ed25519 secara otomatis (jika belum ada) — bukan RSA 2048-bit yang lebih tua. Ed25519 menggunakan elliptic curve cryptography yang memberikan keamanan setara RSA 3072-bit namun dengan key yang jauh lebih kecil dan operasi yang jauh lebih cepat. SSH multiplexing memastikan sesi terautentikasi tetap hidup selama 10 menit, mengurangi frekuensi operasi kriptografi yang mahal.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="hbox rust">
+    <h4>🛡️ Mengapa Model Ini Disebut "Defense-in-Depth"?</h4>
+    <p>Defense-in-depth berarti bahkan jika satu lapisan keamanan berhasil dibobol, lapisan-lapisan berikutnya masih membatasi kerusakan. Contoh skenario serangan dan bagaimana MELISA menghadapinya:</p>
+    <ul>
+      <li><strong>Skenario 1 — Remote setup attack:</strong> Penyerang mendapat akses SSH awal. Layer 1 (Physical Handshake) mencegah mereka menginisialisasi ulang sistem.</li>
+      <li><strong>Skenario 2 — User enumeration:</strong> Penyerang login sebagai user reguler. Layer 4 (chmod 711 /home) mencegah mereka melihat pengguna lain.</li>
+      <li><strong>Skenario 3 — Container escape:</strong> Penyerang berhasil keluar dari container. Layer 6 (user namespace mapping) membatasi mereka ke UID 100000 di host — bukan root.</li>
+      <li><strong>Skenario 4 — DNS poisoning dari dalam container:</strong> Proses berbahaya di dalam container mencoba mengubah DNS. Layer 5 (chattr +i) memblokir modifikasi resolv.conf.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 13 ══════════════════════════ -->
+<div class="sec" id="s13">
+  <div class="sec-hd"><div class="sec-num">13</div><h2>Desain Async & Mengapa MELISA Sangat Kompleks</h2></div>
+
+  <p>Kompleksitas MELISA bukan berasal dari over-engineering, melainkan dari fakta bahwa ia menangani masalah yang memang inherently kompleks: orkestrasi sistem, keamanan multi-layer, kolaborasi tim, dan remote execution — semuanya dalam satu tool. Berikut adalah analisis mendalam setiap sumber kompleksitas:</p>
+
+  <h3>Sumber Kompleksitas 1 — Full Async Architecture</h3>
+  <p>Hampir setiap fungsi di MELISA menggunakan <code>async/await</code>. Ini bukan pilihan yang ringan di Rust — async Rust memerlukan pemahaman yang sangat mendalam tentang <em>lifetimes</em>, <em>ownership</em>, <em>Pin</em>, dan <em>Send/Sync bounds</em>. Namun ini diperlukan karena banyak operasi MELISA berjalan lama (pembuatan container bisa 10+ menit) dan tidak boleh memblokir thread utama:</p>
+  <div class="code">
+<span class="cm">// Sebuah fungsi yang terlihat sederhana, tapi menyembunyikan kompleksitas async yang dalam</span>
+<span class="kw">pub async fn</span> <span class="fn">create_container</span>(name: &str, distro: &<span class="tp">DistroMetadata</span>) {
+    <span class="fn">ensure_host_network_ready</span>().<span class="kw">await</span>;   <span class="cm">// async: network I/O</span>
+    <span class="fn">run_lxc_create</span>(name, distro).<span class="kw">await</span>;    <span class="cm">// async: subprocess + wait</span>
+    <span class="fn">inject_network_config</span>(name).<span class="kw">await</span>;    <span class="cm">// async: file I/O</span>
+    <span class="fn">setup_container_dns</span>(name).<span class="kw">await</span>;      <span class="cm">// async: file I/O + shell exec</span>
+    <span class="fn">auto_initial_setup</span>(name, pkg).<span class="kw">await</span>;   <span class="cm">// async: network + lxc-attach</span>
+    <span class="cm">// Setiap .await adalah titik di mana Tokio bisa menjalankan task lain</span>
+    <span class="cm">// Spinner animasi terus berjalan selama semua ini terjadi</span>
+}
+  </div>
+
+  <h3>Sumber Kompleksitas 2 — Multi-Layer State Management</h3>
+  <p>MELISA harus mengelola state di enam dimensi sekaligus tanpa database:</p>
+  <ul>
+    <li><strong>State LXC</strong> — container running/stopped (dari lxc-info)</li>
+    <li><strong>State pengguna</strong> — /etc/passwd, /etc/sudoers.d/, /home/</li>
+    <li><strong>State proyek</strong> — /opt/melisa/projects/ dan home directories</li>
+    <li><strong>State jaringan</strong> — lxcbr0 bridge, firewall rules</li>
+    <li><strong>State metadata</strong> — file TOML per container</li>
+    <li><strong>State klien</strong> — ~/.config/melisa/profiles.conf, registry</li>
+  </ul>
+
+  <h3>Sumber Kompleksitas 3 — Dual-Mode Binary</h3>
+  <p>Binary MELISA yang sama harus beroperasi dalam dua mode dari single entry point:</p>
+  <div class="code">
+<span class="cm">// main.rs — Routing dua mode dari satu binary</span>
+<span class="kw">if</span> args.len() >= <span class="num">2</span> {
+    <span class="cm">// MODE NON-INTERAKTIF: dipanggil via SSH (-c "command")</span>
+    <span class="cm">// atau langsung dengan argumen (melisa --list)</span>
+    <span class="kw">let</span> cmd = <span class="kw">if</span> args[<span class="num">1</span>] == <span class="str">"-c"</span> { args[<span class="num">2</span>..].join(<span class="str">" "</span>) } <span class="kw">else</span> { args[<span class="num">1</span>..].join(<span class="str">" "</span>) };
+    <span class="fn">execute_command</span>(&cmd, &user, &home).<span class="kw">await</span>;
+    <span class="fn">exit</span>(<span class="num">0</span>);
+} <span class="kw">else</span> {
+    <span class="cm">// MODE INTERAKTIF: tampilkan banner, jalankan REPL</span>
+    <span class="fn">display_melisa_banner</span>();
+    <span class="fn">melisa</span>().<span class="kw">await</span>;
+}
+  </div>
+
+  <h3>Sumber Kompleksitas 4 — History Management yang Benar</h3>
+  <p>MELISA mengimplementasikan manajemen history yang lebih canggih dari shell biasa. Alih-alih menulis ulang seluruh file history setiap perintah (seperti bash), MELISA menggunakan <code>rl.append_history()</code> yang hanya menambahkan baris baru — jauh lebih efisien. Error pun tetap dicatat agar user bisa menekan panah atas dan memperbaiki typo.</p>
+
+  <h3>Sumber Kompleksitas 5 — Graceful Error Handling di Setiap Level</h3>
+  <p>Setiap operasi async memiliki error handling yang berbeda: beberapa menggunakan <code>eprintln!</code>, beberapa <code>return</code> awal, beberapa menggunakan <code>match</code> dengan multiple arms. Ini diperlukan karena beberapa kegagalan (misalnya gagal update DNS lock) hanya perlu warning, sementara kegagalan lain (gagal stop container sebelum delete) harus mengabort seluruh operasi.</p>
+
+  <h3>Spinner Async yang Benar</h3>
+  <p>Modul <code>loading.rs</code> mengimplementasikan spinner progress bar yang berjalan secara konkuren dengan operasi async utama — sesuatu yang tidak trivial di Rust:</p>
+  <div class="code">
+<span class="cm">// loading.rs — Generic async spinner yang bisa dipakai oleh task apapun</span>
+<span class="kw">pub async fn</span> <span class="fn">execute_with_spinner</span>&lt;C, F, T&gt;(message: &str, task_builder: C) -> T
+<span class="kw">where</span>
+    C: <span class="tp">FnOnce</span>(<span class="tp">ProgressBar</span>) -> F,
+    F: <span class="tp">Future</span>&lt;Output = T&gt;,
+{
+    <span class="kw">let</span> pb = <span class="tp">ProgressBar</span>::<span class="fn">new_spinner</span>();
+    pb.<span class="fn">enable_steady_tick</span>(<span class="tp">Duration</span>::from_millis(<span class="num">80</span>)); <span class="cm">// 12.5 FPS</span>
+    
+    <span class="cm">// pb di-clone agar caller bisa memanggil pb.println() dari dalam task</span>
+    <span class="kw">let</span> result = <span class="fn">task_builder</span>(pb.<span class="fn">clone</span>()).<span class="kw">await</span>;
+    pb.<span class="fn">finish_and_clear</span>();
+    result
+}
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 14 ══════════════════════════ -->
+<div class="sec" id="s14">
+  <div class="sec-hd"><div class="sec-num">14</div><h2>MELISA vs Docker vs Kubernetes — Analisis Komprehensif</h2></div>
+
+  <p>Penting untuk menegaskan sejak awal: MELISA tidak dirancang untuk menggantikan Docker atau Kubernetes. Ia mengisi <strong>ceruk yang berbeda</strong> dengan filosofi yang berbeda pula. Analisis ini bertujuan untuk menempatkan MELISA pada posisi yang tepat dalam ekosistem alat container.</p>
+
+  <table class="ctable">
+    <tr>
+      <th>Dimensi Perbandingan</th>
+      <th>MELISA 🦀</th>
+      <th>Docker 🐳</th>
+      <th>Kubernetes ☸</th>
+    </tr>
+    <tr>
+      <td>Teknologi Isolasi Core</td>
+      <td>LXC (OS-level container, full Linux env)</td>
+      <td>OCI (namespaces + cgroups + overlay FS)</td>
+      <td>Abstraksi di atas container runtime</td>
+    </tr>
+    <tr>
+      <td>Model Container</td>
+      <td>System container (punya init, systemd, services)</td>
+      <td>Application container (satu proses per container)</td>
+      <td>Pod (1+ container per Pod)</td>
+    </tr>
+    <tr>
+      <td>Daemon Latar Belakang</td>
+      <td><span class="tag win">Tidak ada</span> — stateless binary</td>
+      <td>dockerd berjalan terus (memory overhead)</td>
+      <td>kube-apiserver, kubelet, etcd, dll</td>
+    </tr>
+    <tr>
+      <td>Setup Complexity</td>
+      <td><span class="tag win">1 perintah</span> — melisa --setup</td>
+      <td>Rendah — install docker</td>
+      <td><span class="tag err">Sangat tinggi</span> — kubeadm, CNI, etcd</td>
+    </tr>
+    <tr>
+      <td>User Management</td>
+      <td><span class="tag win">Built-in</span> — Admin/Regular + Jail Shell</td>
+      <td>Tidak ada native user management</td>
+      <td>RBAC via ServiceAccount/ClusterRole</td>
+    </tr>
+    <tr>
+      <td>Keamanan Inisialisasi</td>
+      <td><span class="tag win">Physical Handshake</span> — unik</td>
+      <td>Tidak ada</td>
+      <td>Tidak ada</td>
+    </tr>
+    <tr>
+      <td>Kolaborasi Proyek</td>
+      <td><span class="tag win">Built-in</span> — invite, pull, sync</td>
+      <td>Tidak ada</td>
+      <td>Tidak ada (butuh GitOps tools)</td>
+    </tr>
+    <tr>
+      <td>Remote Execution</td>
+      <td>SSH pipeline — zero dependency client</td>
+      <td>Docker CLI via REST API (butuh Docker client)</td>
+      <td>kubectl (butuh kubeconfig)</td>
+    </tr>
+    <tr>
+      <td>Container Image Registry</td>
+      <td><span class="tag warn">Tidak ada</span> — hanya LXC templates</td>
+      <td>Docker Hub + private registry</td>
+      <td>Semua registry OCI-compatible</td>
+    </tr>
+    <tr>
+      <td>Auto-Scaling</td>
+      <td><span class="tag err">Tidak ada</span></td>
+      <td>Docker Swarm (terbatas)</td>
+      <td><span class="tag win">HPA, VPA, Cluster Autoscaler</span></td>
+    </tr>
+    <tr>
+      <td>Resource Quota</td>
+      <td><span class="tag warn">Belum ada</span> (in roadmap)</td>
+      <td>--memory, --cpus flags</td>
+      <td>ResourceQuota, LimitRange</td>
+    </tr>
+    <tr>
+      <td>Target Skala</td>
+      <td>Single host, 1-50 users</td>
+      <td>Single-multi host, medium scale</td>
+      <td>Cluster, enterprise scale</td>
+    </tr>
+    <tr>
+      <td>Cocok untuk Edukasi/Lab</td>
+      <td><span class="tag win">Sangat ideal</span></td>
+      <td>Baik</td>
+      <td><span class="tag err">Terlalu kompleks</span></td>
+    </tr>
+    <tr>
+      <td>Memory Footprint Tool</td>
+      <td><span class="tag win">~4-8MB binary</span>, tidak ada daemon</td>
+      <td>~100MB+ dockerd daemon</td>
+      <td>GB++ untuk semua komponen</td>
+    </tr>
+    <tr>
+      <td>Bahasa Implementasi</td>
+      <td>Rust + Bash</td>
+      <td>Go</td>
+      <td>Go</td>
+    </tr>
+  </table>
+
+  <h3>Ceruk Pasar yang Tidak Terlayani</h3>
+  <p>MELISA memiliki posisi yang sangat spesifik namun nyata: ada ratusan ribu institusi pendidikan, lab penelitian, startup kecil, dan perusahaan yang membutuhkan lingkungan development server terisolasi dengan kontrol multi-user — namun tidak membutuhkan (dan tidak mampu mengelola) kompleksitas Docker Swarm atau Kubernetes. Untuk mereka, opsi saat ini sangat terbatas: SSH biasa tanpa isolasi, atau jump langsung ke Kubernetes yang butuh dedicated infrastructure engineer.</p>
+
+  <div class="hbox purple">
+    <h4>🎯 Positioning yang Tepat</h4>
+    <ul>
+      <li><strong>Institusi pendidikan:</strong> Dosen bisa membuat container per mahasiswa untuk kelas pemrograman — satu perintah <code>melisa --invite lab-week1 [semua NIM]</code></li>
+      <li><strong>Startup tahap awal:</strong> Tim kecil berbagi satu server VPS dengan container terisolasi per developer</li>
+      <li><strong>Lab penelitian:</strong> Eksperimen di container bersih tanpa kontaminasi lingkungan riset utama</li>
+      <li><strong>Perusahaan SME:</strong> Environment development yang konsisten untuk tim tanpa butuh DevOps engineer dedicated</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 15 ══════════════════════════ -->
+<div class="sec" id="s15">
+  <div class="sec-hd"><div class="sec-num">15</div><h2>Peta Jalan Pengembangan — Dari Tool ke Platform</h2></div>
+
+  <p>Berdasarkan analisis mendalam terhadap arsitektur yang ada, fondasi yang sudah dibangun pengembang sudah sangat solid untuk mendukung pengembangan dalam berbagai arah. Setiap item roadmap di bawah ini memiliki "pijakan" yang sudah ada di codebase saat ini.</p>
+
+  <h3>Fase Saat Ini (v0.1.x) — Foundation Complete</h3>
+  <div class="roadmap">
+    <div class="rm-item">
+      <h5>Multi-Distro Support <span class="phase now">SUDAH ADA</span></h5>
+      <p>Infrastruktur deteksi distro dan konfigurasi adaptif untuk Fedora/RHEL/Ubuntu/Debian/Arch sudah lengkap di host_distro.rs. Fondasi ini memungkinkan adopsi di hampir semua server Linux production.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Full Container CRUD + Lifecycle Management <span class="phase now">SUDAH ADA</span></h5>
+      <p>Pembuatan, penjalanan, penghentian, dan penghapusan container sudah matang dengan safety checks di setiap transisi.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Multi-User dengan RBAC <span class="phase now">SUDAH ADA</span></h5>
+      <p>Dua tingkat peran (Admin/Regular) dengan file sudoers per-user sudah berjalan.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Project Collaboration System <span class="phase now">SUDAH ADA</span></h5>
+      <p>Invite, update, pull, out sudah berfungsi sebagai sistem kolaborasi dasar yang solid.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Remote Client via SSH Pipeline <span class="phase now">SUDAH ADA</span></h5>
+      <p>Client Bash dengan zero-footprint remote execution, tar streaming, dan context detection sudah production-ready.</p>
+    </div>
+  </div>
+
+  <h3>Fase Dekat (v0.2.x) — Enhancement Layer</h3>
+  <div class="roadmap">
+    <div class="rm-item">
+      <h5>Resource Quota per Container (CPU + RAM) <span class="phase soon">SEGERA</span></h5>
+      <p>LXC mendukung cgroups v1 dan v2 untuk membatasi CPU cores, RAM, dan disk I/O. Infrastruktur metadata TOML dan command executor sudah siap menerima parameter ini. Ini kritis untuk multi-user fairness.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Container Snapshot & Restore <span class="phase soon">SEGERA</span></h5>
+      <p>LXC mendukung <code>lxc-snapshot</code> secara native. MELISA bisa menambahkan <code>--snapshot [container]</code> dan <code>--restore [container] [snapshot-id]</code> sebagai perintah baru dengan minimal effort.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Template Container MELISA Custom <span class="phase soon">SEGERA</span></h5>
+      <p>Kemampuan untuk mendefinisikan "template" container dengan software pre-installed (misalnya template Python dev, template Node.js, template ML) yang bisa di-spin-up dalam hitungan detik tanpa konfigurasi ulang.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Perintah --logs [container] <span class="phase soon">SEGERA</span></h5>
+      <p>Menampilkan output dari syslog/journald container tanpa perlu masuk ke dalam container — berguna untuk monitoring cepat.</p>
+    </div>
+  </div>
+
+  <h3>Fase Menengah (v0.3.x) — Platform Capabilities</h3>
+  <div class="roadmap">
+    <div class="rm-item">
+      <h5>Web Dashboard (REST API + Frontend) <span class="phase future">MASA DEPAN</span></h5>
+      <p>Dengan arsitektur Tokio yang sudah ada, menambahkan HTTP server (axum atau actix-web) sangat natural. Dashboard web akan membuat MELISA accessible bagi pengguna non-CLI dan membuka pasar yang jauh lebih luas. Ini adalah transformasi MELISA dari "tool sysadmin" menjadi "platform developer".</p>
+    </div>
+    <div class="rm-item">
+      <h5>Audit Log & Activity Monitoring <span class="phase future">MASA DEPAN</span></h5>
+      <p>Modul <code>tracing</code> sudah ada di dependencies namun belum digunakan untuk persistent logging. Mengimplementasikan audit trail untuk semua operasi (siapa membuat container apa, kapan, dari IP mana) adalah syarat minimal untuk deployment enterprise.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Container Export/Import (Portable Bundles) <span class="phase future">MASA DEPAN</span></h5>
+      <p>Mengekspor container sebagai tarball terkompresi dan mengimpornya di server lain — memungkinkan distribusi environment development yang konsisten antar mesin dan backup/restore yang mudah.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Network Policies per Container/Project <span class="phase future">MASA DEPAN</span></h5>
+      <p>Saat ini semua container bisa berkomunikasi bebas via lxcbr0. MELISA bisa menambahkan kemampuan untuk mengisolasi container tertentu dari internet, atau membatasi komunikasi antar-container, menggunakan iptables rules yang di-generate otomatis.</p>
+    </div>
+  </div>
+
+  <h3>Fase Lanjut (v1.x) — Enterprise Ready</h3>
+  <div class="roadmap">
+    <div class="rm-item">
+      <h5>Plugin System untuk Distribusi &amp; Integrasi Eksternal <span class="phase future">MASA DEPAN</span></h5>
+      <p>Arsitektur DistroMetadata dan DistroConfig yang sudah modular sangat cocok untuk sistem plugin. Ini memungkinkan penambahan container registry eksternal, notifikasi Slack/Discord, integrasi CI/CD, atau bahkan distribusi proprietary.</p>
+    </div>
+    <div class="rm-item">
+      <h5>Multi-Node Federation (MELISA Cluster) <span class="phase future">MASA DEPAN</span></h5>
+      <p>Kemampuan untuk mengelola banyak MELISA host dari satu panel — mendistribusikan container ke server yang memiliki resource tersedia. Ini adalah langkah menuju "mini-Kubernetes" yang jauh lebih simpel.</p>
+    </div>
+    <div class="rm-item">
+      <h5>LDAP/Active Directory Integration <span class="phase future">MASA DEPAN</span></h5>
+      <p>Integrasi dengan LDAP atau Active Directory untuk autentikasi terpusat — kritis untuk deployment di enterprise yang sudah memiliki infrastruktur identity management.</p>
+    </div>
+  </div>
+
+  <div class="hbox green">
+    <h4>🔮 Potensi Diferensiasi Terbesar MELISA</h4>
+    <p>Dengan penambahan Web Dashboard dan Resource Quotas, MELISA bisa menjadi alternatif self-hosted yang sangat kompetitif untuk platform seperti <strong>Coder</strong>, <strong>Gitpod</strong>, <strong>Okteto</strong>, atau <strong>DevZero</strong> — semua platform yang menyediakan "cloud development environment" — namun tanpa subscription fee dan tanpa ketergantungan pada cloud vendor. Ini adalah pasar yang sedang tumbuh sangat cepat dan MELISA memiliki fondasi teknikal yang tepat untuk memasuki ruang tersebut.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SECTION 16 ══════════════════════════ -->
+<div class="sec" id="s16">
+  <div class="sec-hd"><div class="sec-num">16</div><h2>Kesimpulan & Penilaian Akhir</h2></div>
+
+  <p>Setelah analisis mendalam terhadap seluruh codebase MELISA v0.1.2 — dari <code>main.rs</code> hingga script Bash terakhir di klien — satu kesimpulan yang jelas muncul: <strong>ini bukan proyek sederhana, dan tidak pernah dimaksudkan untuk menjadi sederhana.</strong></p>
+
+  <p>MELISA membuktikan bahwa seorang developer individu dengan visi yang jelas dan pemahaman teknikal yang dalam tentang Linux, keamanan sistem, dan Rust, bisa membangun alat yang jauh melampaui "wrapper LXC biasa". Setiap keputusan desain — dari Physical Handshake hingga Jail Shell, dari concurrent distro caching hingga SSH ControlMaster auto-setup, dari Sticky Bit di /opt/melisa/projects hingga chattr +i pada DNS container — mencerminkan pemahaman yang matang tentang bagaimana sistem Linux sebenarnya bekerja.</p>
+
+  <h3>Poin Kekuatan Utama</h3>
+  <div class="cards">
+    <div class="card green">
+      <span class="card-icon">🛡️</span>
+      <h4>Model Keamanan yang Matang</h4>
+      <p>8 lapisan keamanan yang saling melengkapi, dengan tiga fitur yang benar-benar unik di antara tool container serupa: Physical Handshake, Jail Shell, dan Immutable DNS Lock.</p>
+    </div>
+    <div class="card green">
+      <span class="card-icon">🌐</span>
+      <h4>Multi-Distro Foundation yang Solid</h4>
+      <p>Dukungan untuk seluruh keluarga besar Linux (RHEL, Debian/Ubuntu, Arch) dengan tiga firewall engine berbeda, dideteksi dan dikonfigurasi secara otomatis.</p>
+    </div>
+    <div class="card green">
+      <span class="card-icon">🤝</span>
+      <h4>Kolaborasi Terintegrasi</h4>
+      <p>Sistem proyek dengan invite, update, pull, sync yang tidak memerlukan platform eksternal — fitur yang tidak dimiliki oleh Docker maupun Kubernetes secara native.</p>
+    </div>
+    <div class="card green">
+      <span class="card-icon">⚡</span>
+      <h4>Arsitektur Async yang Benar</h4>
+      <p>Seluruh sistem dibangun di atas Tokio dengan async/await yang konsisten — tidak ada blocking I/O yang akan membekukan terminal saat operasi panjang berjalan.</p>
+    </div>
+  </div>
+
+  <h3>Area yang Perlu Perhatian</h3>
+  <div class="cards">
+    <div class="card">
+      <span class="card-icon">⚠️</span>
+      <h4>Tidak Ada Resource Quotas</h4>
+      <p>Pengguna bisa membuat container yang mengkonsumsi seluruh RAM/CPU server. Ini adalah limitasi penting untuk environment multi-user yang nyata.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">⚠️</span>
+      <h4>Tidak Ada Container Registry</h4>
+      <p>MELISA bergantung pada LXC templates public untuk semua container. Tidak ada cara untuk membuat dan mendistribusikan container image kustom.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon">⚠️</span>
+      <h4>Tidak Ada CLI Output Terstruktur</h4>
+      <p>Semua output adalah teks berwarna yang sulit di-parse secara programatik. Tidak ada opsi JSON output untuk integrasi dengan tool otomasi lain.</p>
+    </div>
+  </div>
+
+  <h3>Penilaian Final</h3>
+  <div class="hbox rust">
+    <h4>🏆 Vonis: Proyek yang Sangat Menjanjikan</h4>
+    <p>MELISA v0.1.2 adalah proof-of-concept yang sangat meyakinkan. Ia membuktikan bahwa semua komponen fundamental yang dibutuhkan untuk menjadi platform container management terdepan sudah ada dan berfungsi. Kompleksitasnya bukan hasil dari over-engineering, melainkan dari fakta bahwa ia menangani masalah yang memang kompleks — dengan cara yang tepat dan elegan.</p>
+    <p style="margin-top:12px">Dengan roadmap yang tepat — khususnya Web Dashboard, resource quotas, dan dukungan multi-distro yang lebih luas — MELISA memiliki semua bahan untuk berkembang dari sebuah tool developer individual menjadi solusi platform yang digunakan oleh institusi, tim engineering, dan bahkan small-to-medium enterprise di seluruh dunia. Fondasi Rustnya memastikan ia akan tetap cepat, aman, dan dapat diandalkan bahkan saat tumbuh jauh lebih besar.</p>
+  </div>
+
+</div>
+
+</div><!-- end .wrap -->
+
+<div class="footer">
+  <strong>MELISA — Management Environment Linux Sandbox</strong><br>
+  Analisis berdasarkan review lengkap codebase v0.1.2 · Erick Adriano Sebastian &lt;ernobaproject@gmail.com&gt; · MIT License · 2026<br>
+  Saferoom Project — "Performance-focused, lightweight, and secure isolated development environments built with Rust."
+</div>
+
+</body>
+</html>
