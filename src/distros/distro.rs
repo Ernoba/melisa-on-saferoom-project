@@ -277,3 +277,11 @@ fn generate_slug(name: &str, release: &str, arch: &str) -> String {
     };
     format!("{}-{}-{}", &name[..name.len().min(3)], release, s_arch).to_lowercase()
 }
+
+pub(crate) fn parse_distro_list_pub(content: &str) -> Vec<DistroMetadata> {
+    parse_distro_list(content)
+}
+
+pub(crate) fn generate_slug_pub(name: &str, release: &str, arch: &str) -> String {
+    generate_slug(name, release, arch)
+}

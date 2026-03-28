@@ -29,6 +29,11 @@ pub enum MelisaError {
     #[error("Metadata not found for container '{0}'. Is it a MELISA container?")]
     MetadataNotFound(String),
 }
+
+pub fn validate_container_name(name: &str) -> bool {
+    !name.contains('/') && !name.contains('\\') && name != ".."
+}
+
 pub async fn print_version() {
     println!("MELISA Engine v{}", VERSION);
     println!("Copyright (c) 2026 {}", AUTHORS);

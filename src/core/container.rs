@@ -276,6 +276,17 @@ async fn auto_initial_setup(name: &str, pkg_manager: &str, pb: &ProgressBar, aud
     }
 }
 
+pub fn get_pkg_update_cmd(pkg_manager: &str) -> &'static str {
+    match pkg_manager {
+        "apt"    => "apt-get update -y",
+        "dnf"    => "dnf makecache",
+        "apk"    => "apk update",
+        "pacman" => "pacman -Sy --noconfirm",
+        "zypper" => "zypper --non-interactive refresh",
+        _        => "true",
+    }
+}
+
 /// Injects a veth bridge network configuration into the container's config file.
 /// Ensures the container is connected to lxcbr0 with a random MAC address.
 /// pb diterima sebagai parameter agar println! tidak konflik dengan spinner.

@@ -394,13 +394,14 @@ pub async fn out_user(targets: &[&str], project_name: &str) {
 ///
 /// Ketika `audit = true`, output dari setiap perintah git diteruskan ke terminal.
 pub async fn update_project(username: &str, project_name: &str, force: bool, audit: bool) {
-    if username.contains('/') || username.contains("..")
-        || project_name.contains('/') || project_name.contains("..")
-    {
-        eprintln!("{}[ERROR]{} Invalid characters detected in input. Sync aborted.", RED, RESET);
+    if !validate_project_input(project_name, username) {
+        eprintln!(
+            "{}[ERROR]{} Invalid characters (path traversal attempt) detected. Sync aborted.", 
+            RED, RESET
+        );
         return;
     }
-
+    
     let base_path = Path::new("/home").join(username).join(project_name);
     let user_path = base_path.to_str().unwrap_or_default().to_string();
     let git_path = base_path.join(".git");
@@ -599,6 +600,16 @@ pub async fn update_project(username: &str, project_name: &str, force: bool, aud
             }
         }
     }
+}
+
+pub fn validate_project_input(project_name: &str, username: &str) -> bool {
+    if username.contains('/') || username.contains("..") {
+        return false;
+    }
+    if project_name.contains('/') || project_name.contains("..") {
+        return false;
+    }
+    true
 }
 
 /// Triggers a hard update across ALL users assigned to a specific project.

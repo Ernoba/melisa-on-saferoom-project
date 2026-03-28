@@ -41,21 +41,31 @@ pub enum ExecResult {
 ///   2. Output mentah dari subprocess (lxc-*, git, apt, userdel, dll.) diteruskan
 ///      langsung ke terminal via Stdio::inherit.
 ///   3. Pesan debug/internal yang biasanya disembunyikan juga ditampilkan.
+
+pub fn parse_command(input: &str) -> (Vec<String>, bool) {
+    let raw_parts: Vec<&str> = input.split_whitespace().collect();
+    let audit = raw_parts.contains(&"--audit");
+    let parts: Vec<String> = raw_parts
+        .into_iter()
+        .filter(|&x| x != "--audit")
+        .map(String::from)
+        .collect();
+    (parts, audit)
+}
+
 pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult {
     // ── PARSE AUDIT FLAG (GLOBAL) ─────────────────────────────────────────────
     // Deteksi --audit dari mana pun posisinya, lalu bersihkan dari token
     // sebelum routing agar tidak mengganggu pencocokan argumen posisi.
-    let raw_parts: Vec<&str> = input.split_whitespace().collect();
-    let audit = raw_parts.contains(&"--audit");
-    let parts: Vec<&str> = raw_parts.into_iter().filter(|&x| x != "--audit").collect();
+    let (parts, audit) = parse_command(input);
 
     if parts.is_empty() {
         return ExecResult::Continue;
     }
 
-    match parts[0] {
+    match parts[0].as_str() { 
         "melisa" => {
-            let sub_cmd = parts.get(1).copied().unwrap_or("");
+            let sub_cmd = parts.get(1).map(|s| s.as_str()).unwrap_or("");
 
             match sub_cmd {
                 "--help" | "-h" => {
@@ -126,7 +136,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 }
 
                 "--search" => {
-                    let keyword = parts.get(2).unwrap_or(&"").to_lowercase();
+                    let keyword = parts.get(2).map(|s| s.as_str()).unwrap_or("").to_lowercase();
 
                     let (list, is_cache) = execute_with_spinner(
                         "Synchronizing distribution list...",
@@ -158,8 +168,8 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 }
 
                 "--create" => {
-                    let name = parts.get(2).unwrap_or(&"");
-                    let code = parts.get(3).unwrap_or(&"");
+                    let name = parts.get(2).map(|s| s.as_str()).unwrap_or("");
+                    let code = parts.get(3).map(|s| s.as_str()).unwrap_or("");
 
                     if name.is_empty() || code.is_empty() {
                         println!("{}[ERROR]{} Container Name and Distribution Code are required!", RED, RESET);
@@ -268,11 +278,20 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                 }
 
                 "--send" => {
-                    if let Some(name) = parts.get(2) {
-                        let cmd_to_send = &parts[3..];
+                    if let Some(name_raw) = parts.get(2) {
+                        let name = name_raw.as_str(); // Ambil &str dari name
+                        
+                        // --- PROSES KONVERSI DI SINI ---
+                        // Kita ambil slice dari index 3 sampai habis, 
+                        // lalu ubah tiap String jadi &str (map), lalu kumpulkan (collect)
+                        let cmd_to_send: Vec<&str> = parts[3..]
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect();
 
                         if !cmd_to_send.is_empty() {
-                            send_command(name, cmd_to_send).await;
+                            // Kirim referensi dari Vec yang baru kita buat
+                            send_command(name, &cmd_to_send).await;
                         } else {
                             println!("{}[ERROR]{} Usage: melisa --send <n> <command>{}", RED, BOLD, RESET);
                             println!("Example: melisa --send mybox apt update");
@@ -415,8 +434,15 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         return ExecResult::Continue;
                     }
 
-                    let project_name = parts[2];
-                    let invited_users = &parts[3..];
+                    // 1. Ambil sebagai referensi (&str), jangan dipindah (move)
+                    let project_name = &parts[2]; 
+
+                    // 2. Konversi slice &[String] menjadi Vec<&str> agar cocok dengan fungsi invite
+                    let invited_users: Vec<&str> = parts[3..]
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect();
+
                     let master_path = format!("{}/{}", PROJECTS_MASTER, project_name);
 
                     if !std::path::Path::new(&master_path).exists() {
@@ -424,7 +450,8 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         return ExecResult::Continue;
                     }
 
-                    invite(project_name, invited_users, audit).await;
+                    // 3. Masukkan &invited_users (referensi ke Vec yang baru dibuat)
+                    invite(project_name, &invited_users, audit).await;
                 }
 
                 "--pull" => {
@@ -436,10 +463,15 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("{}[ERROR]{} Usage: melisa --pull <from_user> <project_name>{}", RED, BOLD, RESET);
                         return ExecResult::Continue;
                     }
-                    let from_user = parts[2];
-                    let project_name = parts[3];
 
+                    // TAMBAHKAN & DI SINI
+                    let from_user = &parts[2]; 
+                    let project_name = &parts[3];
+
+                    // Sekarang variabel di atas bertipe &String, 
+                    // yang otomatis bisa diterima oleh fungsi pull sebagai &str
                     let success = pull(from_user, project_name, audit).await;
+                    
                     if !success {
                         return ExecResult::Continue;
                     }
@@ -479,10 +511,17 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         return ExecResult::Continue;
                     }
 
-                    let project_name = parts[2];
-                    let targets = &parts[3..];
+                    // 1. Pinjam project_name, jangan di-move
+                    let project_name = &parts[2];
 
-                    out_user(targets, project_name).await;
+                    // 2. Konversi slice &[String] menjadi Vec<&str>
+                    let targets: Vec<&str> = parts[3..]
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect();
+
+                    // 3. Kirim referensi ke Vec targets dan project_name
+                    out_user(&targets, project_name).await;
                 }
 
                 "--update" => {
@@ -491,18 +530,19 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         return ExecResult::Continue;
                     }
 
-                    // --force sudah di-strip bersama --audit sebelumnya BUKAN — kita strip
-                    // --audit sebelum routing tapi --force belum. Strip --force di sini.
-                    let force_mode = parts.contains(&"--force");
+                    // 1. Cara cek flag dalam Vec<String>
+                    let force_mode = parts.iter().any(|s| s == "--force");
 
+                    // 2. Filter argumen: Ubah dulu jadi &str baru di-filter
                     let clean_args: Vec<&str> = parts
                         .iter()
-                        .filter(|&&x| x != "--force" && x != "--update" && x != "melisa")
-                        .copied()
+                        .map(|s| s.as_str()) // Kuncinya di sini: ubah String ke &str
+                        .filter(|&x| x != "--force" && x != "--update" && x != "melisa")
                         .collect();
 
+                    // 3. Ambil datanya (sekarang clean_args sudah berisi &str)
                     let (target_user, project_name) = if clean_args.len() == 1 {
-                        (user, clean_args[0])
+                        (user, clean_args[0]) // user di sini adalah &str dari parameter fungsi
                     } else if clean_args.len() >= 2 {
                         (clean_args[0], clean_args[1])
                     } else {
@@ -518,7 +558,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         println!("{}[ERROR]{} Usage: melisa --update-all <project_name>{}", RED, BOLD, RESET);
                         return ExecResult::Continue;
                     }
-                    let project_name = parts[2];
+                    let project_name = &parts[2];
                     update_all_users(project_name, audit).await;
                 }
 
@@ -542,16 +582,19 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
         }
 
         "cd" => {
-            let target = parts.get(1).copied().unwrap_or(home);
+            // 1. Gunakan map(|s| s.as_str()) untuk mengubah Option<&String> menjadi Option<&str>
+            let target = parts.get(1).map(|s| s.as_str()).unwrap_or(home);
+            
+            // 2. Logika shortcut home (~)
             let target = if target == "~" { home } else { target };
 
+            // 3. Eksekusi perpindahan direktori
             if let Err(e) = env::set_current_dir(target) {
                 ExecResult::Error(format!("{}cd: {}{}", RED, e, RESET))
             } else {
                 ExecResult::Continue
             }
         }
-
         // Fallback: dispatch unrecognized commands to the Host system's Bash shell.
         _ => {
             let cargo_bin = format!("{}/.cargo/bin", home);

@@ -75,3 +75,6 @@ async fn main() {
     // Asumsi: melisa() adalah fungsi async
     melisa().await; 
 }
+
+#[cfg(test)]
+mod tests;
