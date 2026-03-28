@@ -68,6 +68,11 @@ if [ "$#" -lt 1 ]; then
     echo "  upload <cont> <dir> <dst> : Transfer a local directory into a container namespace"
     echo "  shell                     : Open a direct interactive SSH shell to the MELISA host"
     echo "  --list / --active         : Enumerate provisioned containers on the active server"
+
+    echo -e "\n${BOLD}TUNNEL & EXPOSE (Cross-Network Access):${RESET}"
+    echo "  tunnel <cont> <port> [lp]  : Forward container HTTP port to localhost (works across networks)"
+    echo "  tunnel-list                : Show all active SSH tunnels"
+    echo "  tunnel-stop <cont> [port]  : Stop a running tunnel"
     
     echo -e "\n${YELLOW}Execute 'melisa <command> --help' for command-specific details.${RESET}"
     exit 1
@@ -154,6 +159,29 @@ case $COMMAND in
         ;;
         
     *) 
+
+    tunnel)
+        if [ -z "$1" ] || [ -z "$2" ]; then
+            echo -e "${RED}[ERROR]${RESET} Usage: melisa tunnel <container> <remote_port> [local_port]"
+            echo -e "  Example: melisa tunnel myapp 3000"
+            echo -e "  Example: melisa tunnel myapp 8080 9090   # different local port"
+            exit 1
+        fi
+        exec_tunnel "$1" "$2" "${3:-}"
+        ;;
+
+    tunnel-list)
+        exec_tunnel_list
+        ;;
+
+    tunnel-stop)
+        if [ -z "$1" ]; then
+            echo -e "${RED}[ERROR]${RESET} Usage: melisa tunnel-stop <container> [remote_port]"
+            exit 1
+        fi
+        exec_tunnel_stop "$1" "${2:-}"
+        ;;
+
         # Fallback Router: If the command isn't recognized locally, 
         # forward the entire string directly to the remote MELISA host.
         exec_forward "$COMMAND" "$@" 

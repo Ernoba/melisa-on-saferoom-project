@@ -276,6 +276,7 @@ async fn auto_initial_setup(name: &str, pkg_manager: &str, pb: &ProgressBar, aud
     }
 }
 
+#[allow(dead_code)]
 pub fn get_pkg_update_cmd(pkg_manager: &str) -> &'static str {
     match pkg_manager {
         "apt"    => "apt-get update -y",
@@ -857,5 +858,31 @@ pub async fn list_containers(only_active: bool) {
             }
         }
         Err(e) => eprintln!("{}[FATAL]{} System Error: {}", RED, RESET, e),
+    }
+}
+
+/// Ambil IP internal container LXC (untuk keperluan SSH tunnel)
+pub async fn get_container_ip(name: &str) -> Option<String> {
+    let output = Command::new("sudo")
+        .args(&["lxc-info", "-P", LXC_PATH, "-n", name, "-i"])
+        .output()
+        .await;
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            // lxc-info -i output: "IP:  10.0.3.5\n"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.starts_with("IP:") {
+                    let ip = line.trim_start_matches("IP:").trim().to_string();
+                    if !ip.is_empty() && !ip.contains("127.") {
+                        return Some(ip);
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }

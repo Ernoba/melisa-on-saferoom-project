@@ -384,3 +384,203 @@ exec_forward() {
     # -t enforces pseudo-tty allocation, allowing interactive remote commands
     ssh -t "$CONN" "melisa $*" 
 }
+
+# ══════════════════════════════════════════════════════
+#  SSH TUNNEL ENGINE — Cross-Network Port Forwarding
+# ══════════════════════════════════════════════════════
+
+exec_tunnel() {
+    ensure_connected
+    local container=$1
+    local remote_port=$2
+    local local_port=${3:-$remote_port}
+
+    if [ -z "$container" ] || [ -z "$remote_port" ]; then
+        log_error "Usage: melisa tunnel <container> <remote_port> [local_port]"
+        log_error "Example: melisa tunnel mywebapp 3000 8080"
+        exit 1
+    fi
+
+    if ! [[ "$remote_port" =~ ^[0-9]+$ ]] || ! [[ "$local_port" =~ ^[0-9]+$ ]]; then
+        log_error "Port numbers must be integers."
+        exit 1
+    fi
+
+    log_header "SSH Tunnel Setup: $container"
+    log_info "Querying container IP from server '${CONN}'..."
+
+    # Minta server return IP container via melisa --ip
+    local CONTAINER_IP
+    CONTAINER_IP=$(ssh "$CONN" "melisa --ip $container" 2>/dev/null | tr -d '[:space:]')
+
+    if [ -z "$CONTAINER_IP" ]; then
+        log_error "Could not retrieve IP for container '$container'."
+        log_error "Make sure container is running: melisa --active"
+        exit 1
+    fi
+
+    log_stat "Container IP" "$CONTAINER_IP"
+
+    # Cek apakah local port sudah dipakai
+    if command -v ss >/dev/null 2>&1; then
+        if ss -tlnp 2>/dev/null | grep -q ":${local_port}[[:space:]]"; then
+            log_error "Local port $local_port is already in use. Use: melisa tunnel $container $remote_port <free_port>"
+            exit 1
+        fi
+    fi
+
+    # Direktori untuk menyimpan PID tunnel
+    local TUNNEL_DIR="$HOME/.config/melisa/tunnels"
+    mkdir -p "$TUNNEL_DIR"
+
+    local TUNNEL_KEY="${container}_${remote_port}"
+    local PID_FILE="$TUNNEL_DIR/${TUNNEL_KEY}.pid"
+    local META_FILE="$TUNNEL_DIR/${TUNNEL_KEY}.meta"
+
+    # Stop tunnel lama jika ada
+    if [ -f "$PID_FILE" ]; then
+        local OLD_PID
+        OLD_PID=$(cat "$PID_FILE" 2>/dev/null)
+        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+            log_info "Terminating previous tunnel (PID $OLD_PID)..."
+            kill "$OLD_PID" 2>/dev/null
+            sleep 1
+        fi
+        rm -f "$PID_FILE" "$META_FILE"
+    fi
+
+    log_info "Establishing tunnel: localhost:${local_port} → [${CONN}] → ${CONTAINER_IP}:${remote_port}"
+
+    # Buat SSH tunnel dengan -f (background) dan -N (no remote command)
+    ssh -N -f \
+        -L "${local_port}:${CONTAINER_IP}:${remote_port}" \
+        -o ExitOnForwardFailure=yes \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
+        -o StrictHostKeyChecking=no \
+        "$CONN" 2>/tmp/melisa_tunnel_err.tmp
+
+    local SSH_EXIT=$?
+    if [ $SSH_EXIT -ne 0 ]; then
+        log_error "SSH tunnel failed (exit: $SSH_EXIT)."
+        [ -f /tmp/melisa_tunnel_err.tmp ] && cat /tmp/melisa_tunnel_err.tmp >&2
+        log_error "Tip: Make sure port $remote_port is listening inside the container."
+        exit 1
+    fi
+
+    # Tangkap PID proses ssh yang baru dibuat
+    sleep 0.5
+    local TUNNEL_PID
+    TUNNEL_PID=$(pgrep -n -f "ssh.*-L.*${local_port}:${CONTAINER_IP}:${remote_port}" 2>/dev/null)
+
+    # Simpan metadata tunnel
+    echo "${TUNNEL_PID:-unknown}" > "$PID_FILE"
+    {
+        echo "container=$container"
+        echo "container_ip=$CONTAINER_IP"
+        echo "remote_port=$remote_port"
+        echo "local_port=$local_port"
+        echo "server=$CONN"
+        echo "started=$(date '+%Y-%m-%d %H:%M:%S')"
+    } > "$META_FILE"
+
+    log_success "Tunnel active!"
+    echo -e ""
+    echo -e "  ${BOLD}${GREEN}► ACCESS URL  :${RESET}  http://localhost:${local_port}"
+    echo -e "  ${BOLD}► ROUTE       :${RESET}  localhost:${local_port} → ${CONN} → ${CONTAINER_IP}:${remote_port}"
+    echo -e "  ${BOLD}► PID         :${RESET}  ${TUNNEL_PID:-N/A}"
+    echo -e "  ${BOLD}► STOP WITH   :${RESET}  melisa tunnel-stop ${container} ${remote_port}"
+    echo -e ""
+    echo -e "  ${YELLOW}[NOTE]${RESET} This tunnel works across different networks as long as"
+    echo -e "  ${YELLOW}       ${RESET} the SSH port of '${CONN}' is reachable from this machine."
+    echo -e ""
+}
+
+exec_tunnel_list() {
+    local TUNNEL_DIR="$HOME/.config/melisa/tunnels"
+
+    if [ ! -d "$TUNNEL_DIR" ] || [ -z "$(ls -A "$TUNNEL_DIR" 2>/dev/null)" ]; then
+        log_info "No tunnels found."
+        return
+    fi
+
+    log_header "Active Tunnels"
+    printf "  ${BOLD}%-20s %-8s %-8s %-25s %s${RESET}\n" "CONTAINER" "R.PORT" "L.PORT" "SERVER" "STATUS"
+    echo "  $(printf '─%.0s' {1..72})"
+
+    local found=0
+    for META_FILE in "$TUNNEL_DIR"/*.meta; do
+        [ -f "$META_FILE" ] || continue
+        local PID_FILE="${META_FILE%.meta}.pid"
+
+        local container remote_port local_port server started pid status_str
+        container=$(grep "^container=" "$META_FILE" | cut -d= -f2-)
+        remote_port=$(grep "^remote_port=" "$META_FILE" | cut -d= -f2-)
+        local_port=$(grep "^local_port=" "$META_FILE" | cut -d= -f2-)
+        server=$(grep "^server=" "$META_FILE" | cut -d= -f2-)
+        started=$(grep "^started=" "$META_FILE" | cut -d= -f2-)
+
+        if [ -f "$PID_FILE" ]; then
+            pid=$(cat "$PID_FILE" 2>/dev/null)
+            if [ -n "$pid" ] && [ "$pid" != "unknown" ] && kill -0 "$pid" 2>/dev/null; then
+                status_str="${GREEN}RUNNING${RESET} (PID $pid)"
+            else
+                status_str="${RED}DEAD${RESET}"
+                rm -f "$PID_FILE" "$META_FILE"
+                continue
+            fi
+        else
+            status_str="${YELLOW}UNKNOWN${RESET}"
+        fi
+
+        printf "  %-20s %-8s %-8s %-25s " "$container" "$remote_port" "$local_port" "$server"
+        echo -e "$status_str"
+        echo -e "  ${BLUE}[INFO]${RESET} Access: http://localhost:${local_port}  |  Started: ${started}"
+        echo ""
+        found=$((found + 1))
+    done
+
+    [ $found -eq 0 ] && log_info "No active tunnels."
+}
+
+exec_tunnel_stop() {
+    local container=$1
+    local remote_port=$2
+
+    if [ -z "$container" ]; then
+        log_error "Usage: melisa tunnel-stop <container> [remote_port]"
+        exit 1
+    fi
+
+    local TUNNEL_DIR="$HOME/.config/melisa/tunnels"
+    local stopped=0
+
+    for META_FILE in "$TUNNEL_DIR"/*.meta; do
+        [ -f "$META_FILE" ] || continue
+
+        local meta_container meta_port
+        meta_container=$(grep "^container=" "$META_FILE" | cut -d= -f2-)
+        meta_port=$(grep "^remote_port=" "$META_FILE" | cut -d= -f2-)
+
+        [ "$meta_container" != "$container" ] && continue
+        [ -n "$remote_port" ] && [ "$meta_port" != "$remote_port" ] && continue
+
+        local PID_FILE="${META_FILE%.meta}.pid"
+        if [ -f "$PID_FILE" ]; then
+            local pid
+            pid=$(cat "$PID_FILE" 2>/dev/null)
+            if [ -n "$pid" ] && [ "$pid" != "unknown" ] && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null
+                log_success "Tunnel stopped (PID $pid) — ${container}:${meta_port}"
+            else
+                log_info "Tunnel process already dead."
+            fi
+        fi
+        rm -f "$PID_FILE" "$META_FILE"
+        stopped=$((stopped + 1))
+    done
+
+    if [ $stopped -eq 0 ]; then
+        log_error "No tunnel found for '${container}'${remote_port:+ port ${remote_port}}."
+    fi
+}

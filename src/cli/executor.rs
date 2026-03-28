@@ -79,6 +79,7 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                     println!("{}GENERAL COMMANDS{}", BOLD, RESET);
                     println!("  --help, -h             Display this comprehensive help manual");
                     println!("  --version              Display system version and project metadata");
+                    println!("  --ip <n>               Get the internal IP address of a running container");
                     println!("  --projects             List all projects associated with your workspace");
                     println!("  --update <project>     Synchronize project workdir via force-reset (overwrites local)");
                     println!("  --list                 Enumerate all LXC containers provisioned to your UID");
@@ -323,6 +324,22 @@ pub async fn execute_command(input: &str, user: &str, home: &str) -> ExecResult 
                         }
                     } else {
                         println!("{}[ERROR]{} Usage: melisa --info <n>{}", RED, BOLD, RESET);
+                    }
+                }
+
+                "--ip" => {
+                    if let Some(name) = parts.get(2) {
+                        match get_container_ip(name).await {
+                            Some(ip) => println!("{}", ip),
+                            None => {
+                                eprintln!(
+                                    "{}[ERROR]{} Cannot get IP for '{}'. Container may be stopped or lack DHCP.",
+                                    RED, RESET, name
+                                );
+                            }
+                        }
+                    } else {
+                        println!("{}[ERROR]{} Usage: melisa --ip <container_name>{}", RED, BOLD, RESET);
                     }
                 }
 

@@ -30,6 +30,7 @@ pub enum MelisaError {
     MetadataNotFound(String),
 }
 
+#[allow(dead_code)]
 pub fn validate_container_name(name: &str) -> bool {
     !name.contains('/') && !name.contains('\\') && name != ".."
 }
